@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CompteRouteImport } from './routes/compte'
 import { Route as ConflitsRouteImport } from './routes/conflits'
+import { Route as ConnexionRouteImport } from './routes/connexion'
 import { Route as FdsRouteImport } from './routes/fds'
 import { Route as PaaRouteImport } from './routes/paa'
 import { Route as PgpRouteImport } from './routes/pgp'
@@ -30,6 +31,7 @@ import { Route as RpsIdRouteImport } from './routes/rps.$id'
 import { Route as SupportIndexRouteImport } from './routes/support.index'
 import { Route as SupportRevueRouteImport } from './routes/support.revue'
 import { Route as VisiteIdRouteImport } from './routes/visite.$id'
+import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -44,6 +46,11 @@ const CompteRoute = CompteRouteImport.update({
 const ConflitsRoute = ConflitsRouteImport.update({
   id: '/conflits',
   path: '/conflits',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConnexionRoute = ConnexionRouteImport.update({
+  id: '/connexion',
+  path: '/connexion',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FdsRoute = FdsRouteImport.update({
@@ -136,11 +143,17 @@ const VisiteIdRoute = VisiteIdRouteImport.update({
   path: '/visite/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
+  id: '/api/auth/$',
+  path: '/api/auth/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/compte': typeof CompteRoute
   '/conflits': typeof ConflitsRoute
+  '/connexion': typeof ConnexionRoute
   '/fds': typeof FdsRouteWithChildren
   '/paa': typeof PaaRoute
   '/pgp': typeof PgpRoute
@@ -159,11 +172,13 @@ export interface FileRoutesByFullPath {
   '/fds/': typeof FdsIndexRoute
   '/rps/': typeof RpsIndexRoute
   '/support/': typeof SupportIndexRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/compte': typeof CompteRoute
   '/conflits': typeof ConflitsRoute
+  '/connexion': typeof ConnexionRoute
   '/paa': typeof PaaRoute
   '/pgp': typeof PgpRoute
   '/rappels': typeof RappelsRoute
@@ -179,12 +194,14 @@ export interface FileRoutesByTo {
   '/fds': typeof FdsIndexRoute
   '/rps': typeof RpsIndexRoute
   '/support': typeof SupportIndexRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/compte': typeof CompteRoute
   '/conflits': typeof ConflitsRoute
+  '/connexion': typeof ConnexionRoute
   '/fds': typeof FdsRouteWithChildren
   '/paa': typeof PaaRoute
   '/pgp': typeof PgpRoute
@@ -203,6 +220,7 @@ export interface FileRoutesById {
   '/fds/': typeof FdsIndexRoute
   '/rps/': typeof RpsIndexRoute
   '/support/': typeof SupportIndexRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -210,6 +228,7 @@ export interface FileRouteTypes {
     | '/'
     | '/compte'
     | '/conflits'
+    | '/connexion'
     | '/fds'
     | '/paa'
     | '/pgp'
@@ -228,11 +247,13 @@ export interface FileRouteTypes {
     | '/fds/'
     | '/rps/'
     | '/support/'
+    | '/api/auth/$'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/compte'
     | '/conflits'
+    | '/connexion'
     | '/paa'
     | '/pgp'
     | '/rappels'
@@ -248,11 +269,13 @@ export interface FileRouteTypes {
     | '/fds'
     | '/rps'
     | '/support'
+    | '/api/auth/$'
   id:
     | '__root__'
     | '/'
     | '/compte'
     | '/conflits'
+    | '/connexion'
     | '/fds'
     | '/paa'
     | '/pgp'
@@ -271,12 +294,14 @@ export interface FileRouteTypes {
     | '/fds/'
     | '/rps/'
     | '/support/'
+    | '/api/auth/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CompteRoute: typeof CompteRoute
   ConflitsRoute: typeof ConflitsRoute
+  ConnexionRoute: typeof ConnexionRoute
   FdsRoute: typeof FdsRouteWithChildren
   PaaRoute: typeof PaaRoute
   PgpRoute: typeof PgpRoute
@@ -289,6 +314,7 @@ export interface RootRouteChildren {
   AnomalieIdRoute: typeof AnomalieIdRoute
   RapportIdRoute: typeof RapportIdRoute
   VisiteIdRoute: typeof VisiteIdRoute
+  ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -312,6 +338,13 @@ declare module '@tanstack/react-router' {
       path: '/conflits'
       fullPath: '/conflits'
       preLoaderRoute: typeof ConflitsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/connexion': {
+      id: '/connexion'
+      path: '/connexion'
+      fullPath: '/connexion'
+      preLoaderRoute: typeof ConnexionRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/fds': {
@@ -440,6 +473,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VisiteIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/auth/$': {
+      id: '/api/auth/$'
+      path: '/api/auth/$'
+      fullPath: '/api/auth/$'
+      preLoaderRoute: typeof ApiAuthSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -484,6 +524,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CompteRoute: CompteRoute,
   ConflitsRoute: ConflitsRoute,
+  ConnexionRoute: ConnexionRoute,
   FdsRoute: FdsRouteWithChildren,
   PaaRoute: PaaRoute,
   PgpRoute: PgpRoute,
@@ -496,6 +537,7 @@ const rootRouteChildren: RootRouteChildren = {
   AnomalieIdRoute: AnomalieIdRoute,
   RapportIdRoute: RapportIdRoute,
   VisiteIdRoute: VisiteIdRoute,
+  ApiAuthSplatRoute: ApiAuthSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

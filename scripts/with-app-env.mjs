@@ -128,7 +128,14 @@ function main(argv) {
   }
   const root = projectRoot();
   const env = mergeAppEnv(readAppEnv(root), { ...readServerSecrets(root), ...process.env });
-  const child = spawn(command, args, { stdio: "inherit", env });
+  // On Windows the target is a `.CMD` shim in node_modules/.bin; bare spawn()
+  // doesn't resolve PATHEXT, so run it through the shell there. POSIX (CI /
+  // Vercel) keeps the direct spawn — behaviour byte-identical.
+  const child = spawn(command, args, {
+    stdio: "inherit",
+    env,
+    shell: process.platform === "win32",
+  });
   // The dev server is long-running and is stopped by signalling this wrapper.
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
     process.on(signal, () => child.kill(signal));
