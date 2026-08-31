@@ -42,12 +42,19 @@ Chaque phase se termine par : `npm run build` + `npm run typecheck` verts, puis 
 - [ ] `.gitignore` : confirmer l'exclusion de `attachments/`, `screenshots/` du déploiement.
 - [ ] `npm audit` + montée des correctifs.
 
-### Phase 2 — Activer Better Auth (email + mot de passe)
-- [ ] `VITE_AUTH_ENABLED=true` (env plateforme) ; `emailAndPasswordEnabled = true` dans `src/lib/auth/email-password.ts`.
-- [ ] Confirmer `DATABASE_URL` (Neon) injecté au déploiement + migrations `migrations/auth/0001_auth.sql` appliquées.
-- [ ] `src/routes/api/auth/$.ts` (handler Better Auth) + `src/routes/login.tsx` selon le skill `auth`.
-- [ ] Garder le compte-rendu de session SSR pour éviter le flicker.
-- [ ] Test : créer un compte, se déconnecter, se reconnecter, cookie `__Host-grok-auth.session_token` présent.
+### Phase 2 — Activer Better Auth (email + mot de passe)  ✅ code prêt (branche `refonte-securite`)
+Fait dans le code :
+- [x] `emailAndPasswordEnabled = true` (`src/lib/auth/email-password.ts`) — seul fichier `auth/` modifié.
+- [x] Schéma Better Auth copié dans `migrations/0001_auth.sql` (appliqué à Neon au build via `npm run db:migrate`).
+- [x] `src/routes/api/auth/$.ts` — handler catch-all `/api/auth/*`.
+- [x] `vercel.json` → `buildCommand: npm run build` (sinon `db:migrate` ne tourne pas).
+- [x] `src/routes/connexion.tsx` — page de test isolée (créer un compte / se connecter / se déconnecter), **la page « Compte » n'est pas touchée**.
+
+À faire côté infra (voir `SETUP-PHASE2.md`) :
+- [ ] Créer une base **Neon** (ou Vercel Postgres) → `DATABASE_URL` (chaîne *pooled*).
+- [ ] Variables Vercel : `VITE_AUTH_ENABLED=true`, `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL=https://sirpassist.vercel.app`.
+- [ ] Fusionner `refonte-securite` → `main`, redéployer.
+- [ ] Test : `/connexion` → créer un compte → session affichée ; `/api/auth/get-session` renvoie l'utilisateur ; recharger la page garde la session.
 
 ### Phase 3 — Migrer comptes + données vers Neon
 - [ ] Nouvelle migration `migrations/0003_sipr_app.sql` : `sipr_user_profile`, `workspace`, `workspace_member`, `visit`, `anomaly`, `fds_notice`, `rps_situation`, `pgp_plan`, `paa_line`, `support_ticket` — toutes avec `user_id` / `workspace_id`.
