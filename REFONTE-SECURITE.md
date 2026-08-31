@@ -58,11 +58,11 @@ Fait dans le code :
 
 ### Phase 3 — Migrer comptes + données vers Neon  (nouveau projet : pas de reprise de données)
 Découpée en sous-étapes, chacune = 1 déploiement + test :
-- [ ] **3a — Profil + forfait + propriétaire.** Migration `sipr_profile` (`user_id` PK, name/title/level/organisation/kind, `plan` défaut `trial`, `trial_ends_at`). Server fns `getMyProfile` / `updateMyProfile` (`authMiddleware`). Création auto du profil à la 1re connexion. Allowlist serveur : `phpiheyns@hotmail.com` -> `plan = pro` force (constante serveur, hors bundle client). Bascule de la page « Compte » sur la session Better Auth + ce profil.
+- [ ] **3a — Profil + forfait + propriétaire.** Migration `sipr_profile` (`user_id` PK, name/title/level/organisation/kind, `plan` défaut `trial`, `trial_ends_at`). Server fns `getMyProfile` / `updateMyProfile` (`authMiddleware`). Création auto du profil à la 1ʳᵉ connexion. Allowlist serveur : `phpiheyns@hotmail.com` → `plan = pro` forcé (constante serveur, hors bundle client). Bascule de la **page « Compte »** sur la session Better Auth + ce profil.
 - [ ] **3b — Espaces.** Tables `workspace` + `workspace_member`. `createWorkspace` / `listMyWorkspaces` / `joinWorkspace(code)`.
-- [ ] **3c — Enregistrements.** Tables `visit` / `anomaly` / `fds_notice` / `rps_situation` + CRUD `authMiddleware`, filtres par appartenance a l'espace. `store.ts` -> cache alimente par le serveur (TanStack Query), fin du snapshot monolithique.
+- [ ] **3c — Enregistrements.** Tables `visit` / `anomaly` / `fds_notice` / `rps_situation` + CRUD `authMiddleware`, filtrés par appartenance à l'espace. `store.ts` → cache alimenté par le serveur (TanStack Query), fin du snapshot monolithique.
 - [ ] **3d — PGP / PAA.** Tables `pgp_plan` / `paa_line` + endpoints.
-- [ ] **3e — Retrait de l'ancien systeme.** Supprimer `cloud-sync.ts`, `supabase*.ts`, `src/lib/password.ts`, `src/lib/admin-account.ts`, le SQL Supabase, les variables `VITE_SUPABASE_*`. (`totp.ts` part en Phase 4.)
+- [ ] **3e — Retrait de l'ancien système.** Supprimer `cloud-sync.ts`, `supabase*.ts`, `src/lib/password.ts`, `src/lib/admin-account.ts`, le SQL Supabase, les variables `VITE_SUPABASE_*`. (`totp.ts` part en Phase 4.)
 
 ### Phase 4 — 2FA serveur
 - [ ] Ajouter le plugin `twoFactor` (`better-auth/plugins`) au `betterAuth({...})` ; migration des tables 2FA.
