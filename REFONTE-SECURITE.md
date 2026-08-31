@@ -56,12 +56,13 @@ Fait dans le code :
 - [ ] Fusionner `refonte-securite` → `main`, redéployer.
 - [ ] Test : `/connexion` → créer un compte → session affichée ; `/api/auth/get-session` renvoie l'utilisateur ; recharger la page garde la session.
 
-### Phase 3 — Migrer comptes + données vers Neon
-- [ ] Nouvelle migration `migrations/0003_sipr_app.sql` : `sipr_user_profile`, `workspace`, `workspace_member`, `visit`, `anomaly`, `fds_notice`, `rps_situation`, `pgp_plan`, `paa_line`, `support_ticket` — toutes avec `user_id` / `workspace_id`.
-- [ ] Server functions CRUD (`src/routes/*` ou `src/lib/*-api.ts`) avec `.middleware([authMiddleware])`, chaque requête filtrée par `context.userId` / appartenance à l'espace.
-- [ ] `store.ts` : le zustand persisté devient un cache local ; la source de vérité est le serveur. Sync = pull au login + push par mutation (plus de snapshot monolithique).
-- [ ] Script de reprise des données existantes (`sipr_snapshots` Supabase → tables Neon) si des espaces réels existent.
-- [ ] Retirer `cloud-sync.ts` / `supabase*.ts` / le SQL Supabase une fois la bascule faite.
+### Phase 3 — Migrer comptes + données vers Neon  (nouveau projet : pas de reprise de données)
+Découpée en sous-étapes, chacune = 1 déploiement + test :
+- [ ] **3a — Profil + forfait + propriétaire.** Migration `sipr_profile` (`user_id` PK, name/title/level/organisation/kind, `plan` défaut `trial`, `trial_ends_at`). Server fns `getMyProfile` / `updateMyProfile` (`authMiddleware`). Création auto du profil à la 1ʳᵉ connexion. Allowlist serveur : `phpiheyns@hotmail.com` → `plan = pro` forcé (constante serveur, hors bundle client). Bascule de la **page « Compte »** sur la session Better Auth + ce profil.
+- [ ] **3b — Espaces.** Tables `workspace` + `workspace_member`. `createWorkspace` / `listMyWorkspaces` / `joinWorkspace(code)`.
+- [ ] **3c — Enregistrements.** Tables `visit` / `anomaly` / `fds_notice` / `rps_situation` + CRUD `authMiddleware`, filtrés par appartenance à l'espace. `store.ts` → cache alimenté par le serveur (TanStack Query), fin du snapshot monolithique.
+- [ ] **3d — PGP / PAA.** Tables `pgp_plan` / `paa_line` + endpoints.
+- [ ] **3e — Retrait de l'ancien système.** Supprimer `cloud-sync.ts`, `supabase*.ts`, `src/lib/password.ts`, `src/lib/admin-account.ts`, le SQL Supabase, les variables `VITE_SUPABASE_*`. (`totp.ts` part en Phase 4.)
 
 ### Phase 4 — 2FA serveur
 - [ ] Ajouter le plugin `twoFactor` (`better-auth/plugins`) au `betterAuth({...})` ; migration des tables 2FA.
