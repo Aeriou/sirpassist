@@ -1,0 +1,29 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+.vercel/
+.netlify/
+.output/
+.nitro/
+.tanstack/
+
+# env & secrets — never commit
+.env
+.env.*
+!.env.example
+
+# logs / OS
+*.log
+.DS_Store
+Thumbs.db
+
+# editor
+.vscode/
+.idea/
+
+# local QA scratch
+screenshots/
+attachments/
+artifacts/

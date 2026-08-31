@@ -1,0 +1,936 @@
+import { create } from "zustand";
+import { persist, createJSONStorage, type StateStorage } from "zustand/middleware";
+import { DEFAULT_PROFILE, SEED_ANOMALIES, SEED_FDS, SEED_PGP, SEED_RPS, SEED_VISITS, SEED_WORKSPACES } from "./seed";
+import type {
+  AccountKind,
+  Anomaly,
+  AnomalyStatus,
+  DeletedIds,
+  FdsNotice,
+  PaaLine,
+  PgpObjective,
+  PgpPlan,
+  Profile,
+  RecordAuthor,
+  RpsSituation,
+  SiprUser,
+  SupportTicket,
+  Visit,
+  Workspace,
+  WorkspaceCloudSnapshot,
+} from "./types";
+import { emptyDeleted, mergeById, mergeDeleted, rememberIds } from "./cloud-sync";
+import { uid } from "./utils";
+import { isoDate, isoDay } from "./format";
+import { isAdminEmail, planView, trialEndFrom } from "./plan";
+import { withAdminEntitlements } from "./admin-account";
+import { emptyPgp, lineFromAnomaly, lineFromRps } from "./pgp";
+import {
+  mergePicks,
+  patchFromPicks,
+  seedConflicts,
+  type DataConflict,
+} from "./conflicts";
+import {
+  DEMO_WORKSPACE_ID,
+  genOrgCode,
+  matchVisitByName,
+  visitLabel,
+  visitWorkspaceId,
+} from "./workspace";
+
+type State = {
+  profile: Profile;
+  visits: Visit[];
+  anomalies: Anomaly[];
+  fds: FdsNotice[];
+  rps: RpsSituation[];
+  pgp: PgpPlan;
+  workspaces: Workspace[];
+  activeWorkspaceId: string;
+  pgpByWorkspace: Record<string, PgpPlan>;
+  setProfile: (p: Partial<Profile>) => void;
+  addVisit: (v: Omit<Visit, "id" | "status" | "workspaceId" | "name"> & { status?: Visit["status"]; workspaceId?: string; name?: string }) => string;
+  updateVisit: (id: string, patch: Partial<Visit>) => void;
+  closeVisit: (id: string) => void;
+  addAnomaly: (a: Omit<Anomaly, "id" | "createdAt" | "status" | "workspaceId"> & { status?: AnomalyStatus; workspaceId?: string }) => string;
+  updateAnomaly: (id: string, patch: Partial<Anomaly>) => void;
+  setAnomalyStatus: (id: string, status: AnomalyStatus) => void;
+  addFds: (n: Omit<FdsNotice, "id" | "createdAt" | "workspaceId"> & { workspaceId?: string }) => string;
+  updateFds: (id: string, patch: Partial<FdsNotice>) => void;
+  addRps: (n: Omit<RpsSituation, "id" | "createdAt" | "workspaceId"> & { workspaceId?: string }) => string;
+  updateRps: (id: string, patch: Partial<RpsSituation>) => void;
+  removeRps: (id: string) => void;
+  updatePgp: (patch: Partial<PgpPlan>) => void;
+  updatePaaLine: (id: string, patch: Partial<PaaLine>) => void;
+  addPaaLine: (line: Omit<PaaLine, "id">) => string;
+  removePaaLine: (id: string) => void;
+  updateObjective: (theme: PgpObjective["theme"], patch: Partial<PgpObjective>) => void;
+  importValidated: () => string[];
+  ackedReminders: string[];
+  ackReminder: (id: string) => void;
+  conflicts: DataConflict[];
+  resolveConflict: (
+    id: string,
+    mode: "terrain" | "bureau" | "fusion",
+    picks?: Record<string, "local" | "remote">,
+    by?: string,
+  ) => void;
+  reopenConflicts: () => void;
+  resetDemo: () => void;
+  users: SiprUser[];
+  sessionUserId: string | null;
+  addUser: (u: SiprUser, opts?: { session?: boolean }) => void;
+  upsertUser: (u: SiprUser) => void;
+  signInUser: (id: string) => void;
+  signOutUser: () => void;
+  removeVisit: (id: string) => void;
+  removeAnomaly: (id: string) => void;
+  removeFds: (id: string) => void;
+  clearExamples: () => number;
+  createWorkspace: (input: { kind: AccountKind; name: string }) => Workspace;
+  joinWorkspace: (code: string) => Workspace | null;
+  switchWorkspace: (id: string) => void;
+  removeWorkspace: (id: string) => boolean;
+  activatePro: (billing?: { stripeCustomerId?: string; stripeSubscriptionId?: string }) => void;
+  activatePlan: (plan: "basic" | "pro", billing?: { stripeCustomerId?: string; stripeSubscriptionId?: string }) => void;
+  patchSessionUser: (patch: Partial<SiprUser>) => void;
+  applyCloudSnapshot: (snap: WorkspaceCloudSnapshot) => void;
+  ensureVisitByName: (name: string) => string;
+  tickets: SupportTicket[];
+  deleted: DeletedIds;
+  addTicket: (t: SupportTicket) => void;
+  patchTicket: (id: string, patch: Partial<SupportTicket>) => void;
+};
+
+const memoryStorage: StateStorage = {
+  getItem: () => null,
+  setItem: () => {},
+  removeItem: () => {},
+};
+
+const DEMO_IDS = new Set([
+  "visit-vdb",
+  "visit-lambert",
+  "ano-cable",
+  "ano-issue",
+  "ano-manutention",
+  "ano-solvant",
+  "ano-epi",
+  "fds-solvex",
+  "fds-peinture",
+  "paa-cable",
+  "paa-issue",
+  "paa-manutention",
+  "paa-solvant",
+  "paa-epi",
+  "paa-ba4",
+  "paa-evac",
+  "paa-rps",
+  "rps-charge",
+]);
+
+export function isExample(id: string, demo?: boolean) {
+  return demo === true || DEMO_IDS.has(id);
+}
+
+function demoAuthor(): RecordAuthor {
+  return {
+    name: DEFAULT_PROFILE.name,
+    title: DEFAULT_PROFILE.title,
+    level: DEFAULT_PROFILE.level,
+  };
+}
+
+function demo() {
+  return {
+    profile: { ...DEFAULT_PROFILE },
+    visits: SEED_VISITS.map((v) => ({ ...v, demo: true, workspaceId: v.workspaceId || DEMO_WORKSPACE_ID })),
+    anomalies: SEED_ANOMALIES.map((a) => ({
+      ...a,
+      demo: true,
+      author: a.author ?? demoAuthor(),
+      workspaceId: a.workspaceId || DEMO_WORKSPACE_ID,
+    })),
+    fds: SEED_FDS.map((f) => ({ ...f, demo: true, workspaceId: f.workspaceId || DEMO_WORKSPACE_ID })),
+    rps: SEED_RPS.map((r) => ({ ...r, demo: true, workspaceId: r.workspaceId || DEMO_WORKSPACE_ID })),
+    pgp: {
+      ...SEED_PGP,
+      objectives: SEED_PGP.objectives.map((o) => ({ ...o })),
+      lines: SEED_PGP.lines.map((l) => ({ ...l, demo: true })),
+    },
+    workspaces: SEED_WORKSPACES.map((w) => ({ ...w })),
+    activeWorkspaceId: DEMO_WORKSPACE_ID,
+    pgpByWorkspace: { [DEMO_WORKSPACE_ID]: {
+      ...SEED_PGP,
+      objectives: SEED_PGP.objectives.map((o) => ({ ...o })),
+      lines: SEED_PGP.lines.map((l) => ({ ...l, demo: true })),
+    } },
+    ackedReminders: [] as string[],
+    conflicts: seedConflicts(),
+    users: [] as SiprUser[],
+    sessionUserId: null as string | null,
+    tickets: [] as SupportTicket[],
+    deleted: emptyDeleted(),
+  };
+}
+
+function persistPgp(get: () => State, set: (p: Partial<State>) => void, next: PgpPlan) {
+  const id = get().activeWorkspaceId;
+  set({
+    pgp: next,
+    pgpByWorkspace: { ...get().pgpByWorkspace, [id]: next },
+  });
+}
+
+export const useSipr = create<State>()(
+  persist(
+    (set, get) => ({
+      ...demo(),
+      setProfile: (p) => set({ profile: { ...get().profile, ...p } }),
+      addVisit: (v) => {
+        const id = uid("visit");
+        const workspaceId = v.workspaceId || get().activeWorkspaceId;
+        const name = (v.name || v.company).trim();
+        set({
+          visits: [
+            {
+              ...v,
+              id,
+              name,
+              status: v.status ?? "en_cours",
+              workspaceId,
+            },
+            ...get().visits,
+          ],
+        });
+        return id;
+      },
+      updateVisit: (id, patch) =>
+        set({
+          visits: get().visits.map((v) => (v.id === id ? { ...v, ...patch } : v)),
+        }),
+      closeVisit: (id) =>
+        set({
+          visits: get().visits.map((v) =>
+            v.id === id ? { ...v, status: "terminee" } : v,
+          ),
+        }),
+      addAnomaly: (a) => {
+        const id = uid("ano");
+        const workspaceId = a.workspaceId || get().activeWorkspaceId;
+        set({
+          anomalies: [
+            {
+              ...a,
+              id,
+              createdAt: isoDate(),
+              status: a.status ?? "ouverte",
+              workspaceId,
+            },
+            ...get().anomalies,
+          ],
+        });
+        return id;
+      },
+      updateAnomaly: (id, patch) =>
+        set({
+          anomalies: get().anomalies.map((a) => (a.id === id ? { ...a, ...patch } : a)),
+        }),
+      setAnomalyStatus: (id, status) =>
+        set({
+          anomalies: get().anomalies.map((a) => (a.id === id ? { ...a, status } : a)),
+        }),
+      addFds: (n) => {
+        const id = uid("fds");
+        set({
+          fds: [
+            {
+              ...n,
+              id,
+              createdAt: isoDate(),
+              workspaceId: n.workspaceId || get().activeWorkspaceId,
+            },
+            ...get().fds,
+          ],
+        });
+        return id;
+      },
+      updateFds: (id, patch) =>
+        set({
+          fds: get().fds.map((f) => (f.id === id ? { ...f, ...patch } : f)),
+        }),
+      addRps: (n) => {
+        const id = uid("rps");
+        set({
+          rps: [
+            {
+              ...n,
+              id,
+              createdAt: isoDate(),
+              workspaceId: n.workspaceId || get().activeWorkspaceId,
+            },
+            ...get().rps,
+          ],
+        });
+        return id;
+      },
+      updateRps: (id, patch) =>
+        set({
+          rps: get().rps.map((r) => (r.id === id ? { ...r, ...patch } : r)),
+        }),
+      removeRps: (id) => {
+        const pgp = get().pgp;
+        const gonePaa = pgp.lines.filter((l) => l.rpsId === id).map((l) => l.id);
+        persistPgp(get, set, {
+          ...pgp,
+          lines: pgp.lines.filter((l) => l.rpsId !== id),
+        });
+        const deleted = get().deleted;
+        set({
+          rps: get().rps.filter((r) => r.id !== id),
+          deleted: {
+            ...deleted,
+            rps: isExample(id) ? deleted.rps : rememberIds(deleted.rps, [id]),
+            paa: rememberIds(deleted.paa, gonePaa.filter((pid) => !isExample(pid))),
+          },
+        });
+      },
+      updatePgp: (patch) => persistPgp(get, set, { ...get().pgp, ...patch }),
+      updatePaaLine: (id, patch) =>
+        persistPgp(get, set, {
+          ...get().pgp,
+          lines: get().pgp.lines.map((l) => (l.id === id ? { ...l, ...patch } : l)),
+        }),
+      addPaaLine: (line) => {
+        const id = uid("paa");
+        persistPgp(get, set, { ...get().pgp, lines: [{ ...line, id }, ...get().pgp.lines] });
+        return id;
+      },
+      removePaaLine: (id) => {
+        const deleted = get().deleted;
+        persistPgp(get, set, {
+          ...get().pgp,
+          lines: get().pgp.lines.filter((l) => l.id !== id),
+        });
+        set({ deleted: { ...deleted, paa: rememberIds(deleted.paa, [id]) } });
+      },
+      updateObjective: (theme, patch) =>
+        persistPgp(get, set, {
+          ...get().pgp,
+          objectives: get().pgp.objectives.map((o) =>
+            o.theme === theme ? { ...o, ...patch } : o,
+          ),
+        }),
+      importValidated: () => {
+        const { anomalies, rps, pgp, activeWorkspaceId } = get();
+        const linkedA = new Set(pgp.lines.map((l) => l.anomalyId).filter(Boolean));
+        const linkedR = new Set(pgp.lines.map((l) => l.rpsId).filter(Boolean));
+        const incomingA = anomalies
+          .filter(
+            (a) =>
+              visitWorkspaceId(a) === activeWorkspaceId &&
+              a.status !== "brouillon" &&
+              !linkedA.has(a.id),
+          )
+          .map((a) => lineFromAnomaly(a, pgp.paaYear));
+        const incomingR = rps
+          .filter(
+            (s) =>
+              visitWorkspaceId(s) === activeWorkspaceId &&
+              s.status !== "cloturee" &&
+              !linkedR.has(s.id),
+          )
+          .map((s) => lineFromRps(s, pgp.paaYear));
+        const incoming = [...incomingR, ...incomingA];
+        if (incoming.length) {
+          persistPgp(get, set, {
+            ...pgp,
+            lines: [...incoming, ...pgp.lines],
+            objectives: incomingR.length
+              ? pgp.objectives.map((o) =>
+                  o.theme === "psychosociaux" ? { ...o, enabled: true } : o,
+                )
+              : pgp.objectives,
+          });
+        }
+        return incoming.map((l) => l.id);
+      },
+      ackedReminders: [],
+      ackReminder: (id) =>
+        set({
+          ackedReminders: get().ackedReminders.includes(id)
+            ? get().ackedReminders
+            : [...get().ackedReminders, id],
+        }),
+      resolveConflict: (id, mode, picks, by = "Camille Dubois") => {
+        const c = get().conflicts.find((x) => x.id === id);
+        if (!c || c.status === "resolu") return;
+        const chosen = mergePicks(c, mode, picks);
+        const patch = patchFromPicks(c, chosen);
+        if (c.entity === "anomaly") {
+          set({
+            anomalies: get().anomalies.map((a) =>
+              a.id === c.entityId ? { ...a, ...(patch as Partial<Anomaly>) } : a,
+            ),
+          });
+        } else {
+          persistPgp(get, set, {
+            ...get().pgp,
+            lines: get().pgp.lines.map((l) =>
+              l.id === c.entityId ? { ...l, ...(patch as Partial<PaaLine>) } : l,
+            ),
+          });
+        }
+        set({
+          conflicts: get().conflicts.map((x) =>
+            x.id === id
+              ? {
+                  ...x,
+                  status: "resolu" as const,
+                  resolution: mode,
+                  picks: chosen,
+                  resolvedAt: isoDate(),
+                  resolvedBy: by,
+                }
+              : x,
+          ),
+        });
+      },
+      reopenConflicts: () => set({ conflicts: seedConflicts() }),
+      resetDemo: () => {
+        const {
+          users,
+          sessionUserId,
+          profile,
+          workspaces,
+          pgpByWorkspace,
+          visits,
+          anomalies,
+          fds,
+          rps,
+          activeWorkspaceId,
+        } = get();
+        const d = demo();
+        const keptWs = workspaces.filter((w) => w.id !== DEMO_WORKSPACE_ID);
+        const keptPgp: Record<string, PgpPlan> = { ...pgpByWorkspace, [DEMO_WORKSPACE_ID]: d.pgp };
+        const nextActive =
+          sessionUserId && keptWs.some((w) => w.id === activeWorkspaceId)
+            ? activeWorkspaceId
+            : DEMO_WORKSPACE_ID;
+        set({
+          ...d,
+          users,
+          sessionUserId,
+          workspaces: [...d.workspaces, ...keptWs],
+          pgpByWorkspace: keptPgp,
+          visits: [...d.visits, ...visits.filter((v) => visitWorkspaceId(v) !== DEMO_WORKSPACE_ID)],
+          anomalies: [
+            ...d.anomalies,
+            ...anomalies.filter((a) => visitWorkspaceId(a) !== DEMO_WORKSPACE_ID),
+          ],
+          fds: [...d.fds, ...fds.filter((f) => visitWorkspaceId(f) !== DEMO_WORKSPACE_ID)],
+          rps: [...d.rps, ...rps.filter((r) => visitWorkspaceId(r) !== DEMO_WORKSPACE_ID)],
+          profile: sessionUserId ? profile : d.profile,
+          activeWorkspaceId: nextActive,
+          pgp: keptPgp[nextActive] ?? d.pgp,
+          tickets: get().tickets,
+          deleted: get().deleted,
+        });
+      },
+      addUser: (u, opts) => {
+        const createdAt = u.createdAt || isoDate();
+        const user: SiprUser = withAdminEntitlements({
+          ...u,
+          createdAt,
+          plan: isAdminEmail(u.email) ? "pro" : (u.plan ?? "trial"),
+          trialEndsAt: u.trialEndsAt ?? trialEndFrom(createdAt.slice(0, 10)),
+          homeWorkspaceId: u.homeWorkspaceId ?? u.workspaceId,
+        });
+        const users = get().users.some((x) => x.id === user.id || x.email === user.email)
+          ? get().users.map((x) =>
+              x.id === user.id || x.email === user.email
+                ? {
+                    ...x,
+                    ...user,
+                    totpSecret: user.totpSecret ?? x.totpSecret,
+                    totpEnabled: user.totpEnabled ?? x.totpEnabled,
+                    totpBackupHashes: user.totpBackupHashes ?? x.totpBackupHashes,
+                  }
+                : x,
+            )
+          : [...get().users, user];
+        if (opts?.session === false) {
+          set({ users });
+          return;
+        }
+        set({
+          users,
+          sessionUserId: user.id,
+          profile: {
+            name: user.name,
+            title: user.title,
+            level: user.level,
+            organisation: user.organisation,
+            kind: user.kind,
+            workspaceId: user.workspaceId,
+          },
+        });
+        if (user.workspaceId) get().switchWorkspace(user.workspaceId);
+      },
+      upsertUser: (u) => get().addUser(u, { session: false }),
+      signInUser: (id) => {
+        const u = get().users.find((x) => x.id === id);
+        if (!u) return;
+        const next = isAdminEmail(u.email) && u.plan !== "pro" ? { ...u, plan: "pro" as const } : u;
+        if (next !== u) {
+          set({ users: get().users.map((x) => (x.id === id ? next : x)) });
+        }
+        set({
+          sessionUserId: next.id,
+          profile: {
+            name: next.name,
+            title: next.title,
+            level: next.level,
+            organisation: next.organisation,
+            kind: next.kind,
+            workspaceId: next.workspaceId,
+          },
+        });
+        if (next.workspaceId) get().switchWorkspace(next.workspaceId);
+      },
+      signOutUser: () => set({ sessionUserId: null }),
+      patchSessionUser: (patch) => {
+        const id = get().sessionUserId;
+        if (!id) return;
+        set({
+          users: get().users.map((u) => (u.id === id ? { ...u, ...patch } : u)),
+        });
+      },
+      removeVisit: (id) => {
+        const visit = get().visits.find((v) => v.id === id);
+        const goneAnomalies = get().anomalies.filter((a) => a.visitId === id);
+        const goneAnomalyIds = goneAnomalies.map((a) => a.id);
+        const pgp = get().pgp;
+        const gonePaa = pgp.lines.filter((l) => goneAnomalyIds.includes(l.anomalyId ?? "")).map((l) => l.id);
+        persistPgp(get, set, {
+          ...pgp,
+          lines: pgp.lines.filter((l) => !goneAnomalyIds.includes(l.anomalyId ?? "")),
+        });
+        const deleted = get().deleted;
+        const skipVisit = isExample(id, visit?.demo);
+        set({
+          visits: get().visits.filter((v) => v.id !== id),
+          anomalies: get().anomalies.filter((a) => a.visitId !== id),
+          fds: get().fds.map((f) => (f.visitId === id ? { ...f, visitId: undefined } : f)),
+          rps: get().rps.map((r) => (r.visitId === id ? { ...r, visitId: undefined } : r)),
+          deleted: {
+            ...deleted,
+            visits: skipVisit ? deleted.visits : rememberIds(deleted.visits, [id]),
+            anomalies: rememberIds(
+              deleted.anomalies,
+              goneAnomalies.filter((a) => !isExample(a.id, a.demo)).map((a) => a.id),
+            ),
+            paa: rememberIds(deleted.paa, gonePaa.filter((pid) => !isExample(pid))),
+          },
+        });
+      },
+      removeAnomaly: (id) => {
+        const row = get().anomalies.find((a) => a.id === id);
+        const pgp = get().pgp;
+        const gonePaa = pgp.lines.filter((l) => l.anomalyId === id).map((l) => l.id);
+        persistPgp(get, set, {
+          ...pgp,
+          lines: pgp.lines.filter((l) => l.anomalyId !== id),
+        });
+        const deleted = get().deleted;
+        set({
+          anomalies: get().anomalies.filter((a) => a.id !== id),
+          deleted: {
+            ...deleted,
+            anomalies: isExample(id, row?.demo) ? deleted.anomalies : rememberIds(deleted.anomalies, [id]),
+            paa: rememberIds(deleted.paa, gonePaa.filter((pid) => !isExample(pid))),
+          },
+        });
+      },
+      removeFds: (id) => {
+        const row = get().fds.find((f) => f.id === id);
+        const deleted = get().deleted;
+        set({
+          fds: get().fds.filter((f) => f.id !== id),
+          deleted: {
+            ...deleted,
+            fds: isExample(id, row?.demo) ? deleted.fds : rememberIds(deleted.fds, [id]),
+          },
+        });
+      },
+      clearExamples: () => {
+        const visits = get().visits.filter((v) => !isExample(v.id, v.demo));
+        const anomalies = get().anomalies.filter((a) => !isExample(a.id, a.demo));
+        const fds = get().fds.filter((f) => !isExample(f.id, f.demo));
+        const rps = get().rps.filter((r) => !isExample(r.id, r.demo));
+        const lines = get().pgp.lines.filter((l) => !isExample(l.id, l.demo));
+        const n =
+          get().visits.length -
+          visits.length +
+          (get().anomalies.length - anomalies.length) +
+          (get().fds.length - fds.length) +
+          (get().rps.length - rps.length) +
+          (get().pgp.lines.length - lines.length);
+        persistPgp(get, set, { ...get().pgp, lines });
+        set({
+          visits,
+          anomalies,
+          fds,
+          rps,
+          conflicts: get().activeWorkspaceId === DEMO_WORKSPACE_ID ? [] : get().conflicts,
+        });
+        return n;
+      },
+      createWorkspace: (input) => {
+        const session = get().users.find((u) => u.id === get().sessionUserId);
+        const view = planView(session, 0);
+        const owned = get().workspaces.filter((w) => w.id !== DEMO_WORKSPACE_ID);
+        if (session && !view.canMulti && owned.length >= 1) {
+          get().switchWorkspace(owned[0]!.id);
+          return owned[0]!;
+        }
+        const id = uid("ws");
+        const ws: Workspace = {
+          id,
+          kind: input.kind,
+          name: input.name.trim(),
+          code: genOrgCode(),
+          createdAt: isoDate(),
+        };
+        const plan = emptyPgp(ws.name, get().profile.name);
+        set({
+          workspaces: [...get().workspaces, ws],
+          pgpByWorkspace: { ...get().pgpByWorkspace, [id]: plan },
+        });
+        get().switchWorkspace(id);
+        return ws;
+      },
+      joinWorkspace: (code) => {
+        const needle = code.trim().toUpperCase();
+        const ws = get().workspaces.find((w) => w.code.toUpperCase() === needle);
+        if (!ws) return null;
+        get().switchWorkspace(ws.id);
+        return ws;
+      },
+      switchWorkspace: (id) => {
+        const ws = get().workspaces.find((w) => w.id === id);
+        if (!ws) return;
+        const plan = get().pgpByWorkspace[id] ?? emptyPgp(ws.name, get().profile.name);
+        set({
+          activeWorkspaceId: id,
+          pgp: plan,
+          pgpByWorkspace: { ...get().pgpByWorkspace, [id]: plan },
+          profile: {
+            ...get().profile,
+            workspaceId: id,
+            kind: ws.kind,
+            organisation: ws.kind === "entreprise" ? ws.name : get().profile.organisation,
+          },
+        });
+        const sessionId = get().sessionUserId;
+        if (sessionId) {
+          set({
+            users: get().users.map((u) =>
+              u.id === sessionId ? { ...u, kind: ws.kind } : u,
+            ),
+          });
+        }
+      },
+      removeWorkspace: (id) => {
+        const { sessionUserId, users, workspaces, visits, anomalies, fds, rps, activeWorkspaceId } =
+          get();
+        const nextWs = workspaces.filter((w) => w.id !== id);
+        const session = users.find((u) => u.id === sessionUserId);
+        set({
+          workspaces: nextWs,
+          visits: visits.filter((v) => visitWorkspaceId(v) !== id),
+          anomalies: anomalies.filter((a) => visitWorkspaceId(a) !== id),
+          fds: fds.filter((f) => visitWorkspaceId(f) !== id),
+          rps: rps.filter((r) => visitWorkspaceId(r) !== id),
+        });
+        if (!nextWs.length) {
+          const d = demo();
+          set({
+            workspaces: d.workspaces,
+            visits: [...d.visits, ...get().visits],
+            anomalies: [...d.anomalies, ...get().anomalies],
+            fds: [...d.fds, ...get().fds],
+            rps: [...d.rps, ...get().rps],
+            pgp: d.pgp,
+            pgpByWorkspace: { ...get().pgpByWorkspace, [DEMO_WORKSPACE_ID]: d.pgp },
+            activeWorkspaceId: DEMO_WORKSPACE_ID,
+          });
+          return true;
+        }
+        const fallback =
+          (session?.homeWorkspaceId && nextWs.some((w) => w.id === session.homeWorkspaceId)
+            ? session.homeWorkspaceId
+            : nextWs[0]?.id) ?? DEMO_WORKSPACE_ID;
+        const nextActive = activeWorkspaceId === id ? fallback : get().activeWorkspaceId;
+        if (session && (session.homeWorkspaceId === id || session.workspaceId === id)) {
+          set({
+            users: get().users.map((u) =>
+              u.id === session.id ? { ...u, homeWorkspaceId: fallback, workspaceId: fallback } : u,
+            ),
+          });
+        }
+        if (nextActive !== get().activeWorkspaceId) get().switchWorkspace(nextActive);
+        return true;
+      },
+      activatePlan: (plan, billing) => {
+        const id = get().sessionUserId;
+        if (!id) return;
+        set({
+          users: get().users.map((u) =>
+            u.id === id
+              ? {
+                  ...u,
+                  plan,
+                  proSince: isoDate(),
+                  stripeCustomerId: billing?.stripeCustomerId ?? u.stripeCustomerId,
+                  stripeSubscriptionId: billing?.stripeSubscriptionId ?? u.stripeSubscriptionId,
+                }
+              : u,
+          ),
+        });
+      },
+      activatePro: (billing) => get().activatePlan("pro", billing),
+      applyCloudSnapshot: (snap) => {
+        const ws = snap.workspace;
+        if (!ws?.id) return;
+        const { visits, anomalies, fds, rps, users, workspaces, pgpByWorkspace, deleted: localDeleted } = get();
+        const deleted = mergeDeleted(localDeleted, snap.deleted);
+        const nextWorkspaces = workspaces.some((w) => w.id === ws.id)
+          ? workspaces.map((w) => (w.id === ws.id ? { ...w, ...ws } : w))
+          : [...workspaces, ws];
+        const localPgp = pgpByWorkspace[ws.id];
+        const nextPgp: PgpPlan = localPgp
+          ? {
+              ...snap.pgp,
+              ...localPgp,
+              lines: mergeById(localPgp.lines, snap.pgp.lines, deleted.paa),
+              objectives: localPgp.objectives.length ? localPgp.objectives : snap.pgp.objectives,
+            }
+          : {
+              ...snap.pgp,
+              lines: snap.pgp.lines.filter((l) => !deleted.paa.includes(l.id)),
+            };
+        const nextUsers = [...users];
+        for (const u of snap.users) {
+          if (!nextUsers.some((x) => x.id === u.id || x.email === u.email)) nextUsers.push(u);
+        }
+        set({
+          workspaces: nextWorkspaces,
+          visits: mergeById(visits, snap.visits, deleted.visits),
+          anomalies: mergeById(anomalies, snap.anomalies, deleted.anomalies),
+          fds: mergeById(fds, snap.fds, deleted.fds),
+          rps: mergeById(rps, snap.rps ?? [], deleted.rps),
+          users: nextUsers,
+          pgpByWorkspace: { ...pgpByWorkspace, [ws.id]: nextPgp },
+          deleted,
+        });
+        get().switchWorkspace(ws.id);
+      },
+      ensureVisitByName: (raw) => {
+        const name = raw.trim();
+        if (!name) return "";
+        const scoped = get().visits.filter(
+          (v) => visitWorkspaceId(v) === get().activeWorkspaceId,
+        );
+        const found = matchVisitByName(scoped, name);
+        if (found) return found.id;
+        const ws = get().workspaces.find((w) => w.id === get().activeWorkspaceId);
+        const company = ws?.kind === "entreprise" ? ws.name : name;
+        return get().addVisit({
+          name,
+          company,
+          site: "",
+          interlocutor: "",
+          date: isoDay(),
+        });
+      },
+      addTicket: (t) => set({ tickets: [t, ...get().tickets] }),
+      patchTicket: (id, patch) =>
+        set({
+          tickets: get().tickets.map((x) => (x.id === id ? { ...x, ...patch } : x)),
+        }),
+    }),
+    {
+      name: "siprassist-v5",
+      skipHydration: true,
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<ReturnType<typeof demo>> & {
+          pgpByWorkspace?: Record<string, PgpPlan>;
+          workspaces?: Workspace[];
+          activeWorkspaceId?: string;
+        };
+        const visits = (p.visits ?? current.visits).map((v) =>
+          ({
+            ...v,
+            demo: isExample(v.id, v.demo) || v.demo,
+            workspaceId: v.workspaceId || DEMO_WORKSPACE_ID,
+            name: v.name || v.company,
+          }),
+        );
+        const anomalies = (p.anomalies ?? current.anomalies).map((a) => {
+          const demoFlag = isExample(a.id, a.demo);
+          return {
+            ...a,
+            demo: demoFlag || a.demo,
+            author: a.author ?? (demoFlag ? demoAuthor() : undefined),
+            workspaceId: a.workspaceId || DEMO_WORKSPACE_ID,
+          };
+        });
+        const fds = (p.fds ?? current.fds).map((f) => ({
+          ...f,
+          demo: isExample(f.id, f.demo) ? true : f.demo,
+          workspaceId: f.workspaceId || DEMO_WORKSPACE_ID,
+        }));
+        const rps = ((p as { rps?: RpsSituation[] }).rps ?? current.rps ?? []).map((r) => ({
+          ...r,
+          demo: isExample(r.id, r.demo) ? true : r.demo,
+          workspaceId: r.workspaceId || DEMO_WORKSPACE_ID,
+        }));
+        const workspaces = p.workspaces?.length
+          ? p.workspaces
+          : current.workspaces;
+        const activeWorkspaceId = p.activeWorkspaceId ?? current.activeWorkspaceId;
+        const pgp = p.pgp
+          ? {
+              ...p.pgp,
+              lines: p.pgp.lines.map((l) =>
+                isExample(l.id, l.demo) ? { ...l, demo: true } : l,
+              ),
+            }
+          : current.pgp;
+        const pgpByWorkspace: Record<string, PgpPlan> = {
+          ...current.pgpByWorkspace,
+          ...(p.pgpByWorkspace ?? {}),
+        };
+        pgpByWorkspace[activeWorkspaceId] = pgp;
+        if (!pgpByWorkspace[DEMO_WORKSPACE_ID]) {
+          pgpByWorkspace[DEMO_WORKSPACE_ID] = current.pgp;
+        }
+        const users = (p.users ?? []).map((u) => {
+          const createdAt = u.createdAt || isoDate();
+          const plan =
+            isAdminEmail(u.email) || u.plan === "pro"
+              ? ("pro" as const)
+              : u.plan === "basic"
+                ? ("basic" as const)
+                : ("trial" as const);
+          return withAdminEntitlements({
+            ...u,
+            kind: u.kind ?? "entreprise",
+            workspaceId: u.workspaceId || DEMO_WORKSPACE_ID,
+            homeWorkspaceId: u.homeWorkspaceId ?? u.workspaceId ?? DEMO_WORKSPACE_ID,
+            plan,
+            trialEndsAt: u.trialEndsAt ?? trialEndFrom(createdAt.slice(0, 10), isoDay()),
+            createdAt,
+            totpSecret: u.totpSecret,
+            totpEnabled: u.totpEnabled,
+            totpBackupHashes: u.totpBackupHashes,
+          });
+        });
+        return {
+          ...current,
+          ...p,
+          visits,
+          anomalies,
+          fds,
+          rps,
+          pgp,
+          workspaces,
+          activeWorkspaceId,
+          pgpByWorkspace,
+          users,
+          sessionUserId: p.sessionUserId ?? null,
+          tickets: p.tickets ?? current.tickets ?? [],
+          deleted: mergeDeleted(current.deleted, (p as { deleted?: DeletedIds }).deleted),
+        };
+      },
+      storage: createJSONStorage(() =>
+        typeof window === "undefined" ? memoryStorage : localStorage,
+      ),
+      partialize: (s) => ({
+        profile: s.profile,
+        visits: s.visits,
+        anomalies: s.anomalies,
+        fds: s.fds,
+        rps: s.rps,
+        pgp: s.pgp,
+        workspaces: s.workspaces,
+        activeWorkspaceId: s.activeWorkspaceId,
+        pgpByWorkspace: s.pgpByWorkspace,
+        ackedReminders: s.ackedReminders,
+        conflicts: s.conflicts,
+        users: s.users,
+        sessionUserId: s.sessionUserId,
+        tickets: s.tickets,
+        deleted: s.deleted,
+      }),
+    },
+  ),
+);
+
+export function selectWorkspace(s: { workspaces: Workspace[]; activeWorkspaceId: string }) {
+  return s.workspaces.find((w) => w.id === s.activeWorkspaceId) ?? s.workspaces[0];
+}
+
+export function useWorkspaceVisits() {
+  const visits = useSipr((s) => s.visits);
+  const id = useSipr((s) => s.activeWorkspaceId);
+  return visits.filter((v) => visitWorkspaceId(v) === id);
+}
+
+export function useWorkspaceAnomalies() {
+  const anomalies = useSipr((s) => s.anomalies);
+  const id = useSipr((s) => s.activeWorkspaceId);
+  return anomalies.filter((a) => visitWorkspaceId(a) === id);
+}
+
+export function useWorkspaceFds() {
+  const fds = useSipr((s) => s.fds);
+  const id = useSipr((s) => s.activeWorkspaceId);
+  return fds.filter((f) => visitWorkspaceId(f) === id);
+}
+
+export function useWorkspaceRps() {
+  const rps = useSipr((s) => s.rps);
+  const id = useSipr((s) => s.activeWorkspaceId);
+  return rps.filter((r) => visitWorkspaceId(r) === id);
+}
+
+export function useActiveVisit() {
+  const visits = useWorkspaceVisits();
+  return visits.find((v) => v.status === "en_cours") ?? visits[0];
+}
+
+export function currentAuthor(state: {
+  profile: Profile;
+  users: SiprUser[];
+  sessionUserId: string | null;
+}): RecordAuthor {
+  const u = state.users.find((x) => x.id === state.sessionUserId);
+  if (u) {
+    return { userId: u.id, name: u.name, title: u.title, level: u.level };
+  }
+  return {
+    name: state.profile.name,
+    title: state.profile.title,
+    level: state.profile.level,
+  };
+}
+
+export function dueSoon(iso?: string): boolean {
+  if (!iso) return false;
+  return iso <= isoDay();
+}
+
+export { visitLabel };
