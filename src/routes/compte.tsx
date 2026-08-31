@@ -3,6 +3,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Building2, Copy, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { CloudCard } from "@/components/cloud-card";
+import { GroupSection } from "@/components/group-section";
 import { PlanBanner } from "@/components/plan-banner";
 import { PlanPicker } from "@/components/plan-picker";
 import { WorkspaceSwipeRow } from "@/components/workspace-swipe";
@@ -300,6 +301,8 @@ function ComptePage() {
       ) : null}
 
       <CloudCard />
+
+      <GroupSection />
 
       {workspaces.length > 0 ? (
         <Card className="space-y-3">
