@@ -4,7 +4,7 @@ Objectif de cette étape : déployer l'app **telle quelle** (comportement actuel
 sur ta nouvelle infra, et confirmer que le build Vercel passe. Aucune modification de
 comportement ici — juste le nettoyage et le passage en variables d'environnement.
 
-Dossier local du projet : `C:\Users\Phil\SIPPAssist\sippassist`
+Dossier local du projet : `C:\Users\Phil\SIPPAssist\sirpassist`
 Branches : `main` (référence) · `refonte-securite` (travail).
 
 ---
@@ -15,7 +15,7 @@ Branches : `main` (référence) · `refonte-securite` (travail).
 2. Dans un terminal (Git est installé) :
 
 ```bash
-cd C:\Users\Phil\SIPPAssist\sippassist
+cd C:\Users\Phil\SIPPAssist\sirpassist
 git remote add origin https://github.com/<ton-compte>/sippassist.git
 git push -u origin main
 git push -u origin refonte-securite
