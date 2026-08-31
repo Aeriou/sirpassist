@@ -188,32 +188,6 @@ export function CloudCard() {
           ) : null}
         </div>
       )}
-      {status === "ok" ? (
-        <button
-          type="button"
-          className="text-left text-sm text-accent"
-          onClick={() => {
-            setSqlOpen((v) => !v);
-            if (!sqlOpen) void copySql();
-          }}
-        >
-          {sqlOpen ? "Masquer le script SQL" : "Mettre à jour le script (connexion e-mail)"}
-        </button>
-      ) : null}
-      {status === "ok" && sqlOpen ? (
-        <>
-          <p className="text-sm text-muted">
-            Collez ce script une fois dans l'éditeur SQL, puis Run — même si la copie est déjà active.
-          </p>
-          <Button type="button" className="w-full" onClick={() => void openEditor()}>
-            <ExternalLink />
-            Copier et ouvrir l'éditeur
-          </Button>
-          <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-xl bg-surface-2 p-3 font-mono text-xs text-muted">
-            {script}
-          </pre>
-        </>
-      ) : null}
     </Card>
   );
 }
