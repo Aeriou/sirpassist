@@ -1,0 +1,75 @@
+import { useEffect, useState } from "react";
+import { authClient } from "@/lib/auth/client";
+import { useSipr } from "@/lib/store";
+import { DEMO_WORKSPACE_ID } from "@/lib/workspace";
+
+/**
+ * Fait le pont entre la session Better Auth (serveur) et l'état local de l'app.
+ *
+ * Tant que la migration complète des données n'est pas faite, l'app travaille
+ * toujours sur le store zustand. Ce composant garantit que : connecté via
+ * `/connexion` ⇒ connecté PARTOUT (avatar, espace, profil), et que l'espace
+ * démo disparaît dès qu'un compte est ouvert. Déconnexion Better Auth ⇒
+ * déconnexion locale.
+ *
+ * Monté une fois dans `__root.tsx`. Ne rend rien.
+ */
+export function SessionBridge() {
+  const { data, isPending } = authClient.useSession();
+  const baUserId = data?.user?.id ?? null;
+
+  // Attendre que le store local soit réhydraté depuis localStorage, sinon on
+  // recréerait un compte/espace alors qu'il en existe déjà un.
+  const [hydrated, setHydrated] = useState(() => useSipr.persist.hasHydrated());
+  useEffect(() => {
+    if (hydrated) return;
+    if (useSipr.persist.hasHydrated()) {
+      setHydrated(true);
+      return;
+    }
+    return useSipr.persist.onFinishHydration(() => setHydrated(true));
+  }, [hydrated]);
+
+  useEffect(() => {
+    if (isPending || !hydrated) return;
+    const st = useSipr.getState();
+    const baUser = data?.user;
+
+    if (baUser) {
+      const email = (baUser.email ?? "").toLowerCase();
+      const localId = `ba_${baUser.id}`;
+      const target = st.users.find((u) => u.id === localId || (email && u.email === email));
+
+      if (target) {
+        if (st.sessionUserId !== target.id) st.signInUser(target.id);
+        return;
+      }
+
+      // Premier passage pour ce compte : lui donner un espace personnel réel
+      // (l'espace démo cesse alors d'être l'espace actif).
+      const owned = st.workspaces.filter((w) => w.id !== DEMO_WORKSPACE_ID);
+      const wsId = owned[0]?.id ?? st.createWorkspace({ kind: "independant", name: "Mon espace" }).id;
+      st.addUser({
+        id: localId,
+        name: baUser.name || email || "Conseiller",
+        email,
+        title: "Conseiller en prévention",
+        level: 3,
+        organisation: "",
+        kind: "independant",
+        workspaceId: wsId,
+        salt: "",
+        passwordHash: "",
+        createdAt: new Date().toISOString(),
+      });
+      return;
+    }
+
+    // Déconnecté de Better Auth : retirer une session locale issue du pont.
+    if (st.sessionUserId && st.sessionUserId.startsWith("ba_")) {
+      st.signOutUser();
+    }
+  }, [baUserId, isPending, hydrated]);
+
+  return null;
+}

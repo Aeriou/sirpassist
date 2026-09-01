@@ -19,6 +19,7 @@ import { Button } from "./ui/button";
 import { Dialog, DialogContent } from "./ui/dialog";
 import { Field, Input } from "./ui/input";
 import { useOnline } from "@/lib/online";
+import { authClient } from "@/lib/auth/client";
 import { toast } from "sonner";
 import { buildReminders } from "@/lib/reminders";
 import { selectWorkspace, useSipr, useWorkspaceAnomalies } from "@/lib/store";
@@ -368,7 +369,6 @@ function ProfileDialog({ onReset, onClose }: { onReset: () => void; onClose: () 
   const patchSessionUser = useSipr((s) => s.patchSessionUser);
   const sessionUserId = useSipr((s) => s.sessionUserId);
   const users = useSipr((s) => s.users);
-  const signOutUser = useSipr((s) => s.signOutUser);
   const workspace = useSipr(selectWorkspace);
   const session = users.find((u) => u.id === sessionUserId);
 
@@ -439,9 +439,9 @@ function ProfileDialog({ onReset, onClose }: { onReset: () => void; onClose: () 
               variant="outline"
               className="w-full"
               onClick={() => {
-                signOutUser();
+                void authClient.signOut();
                 onClose();
-                toast.message("Déconnecté. Les dossiers restent sur l'appareil.");
+                toast.message("Déconnecté.");
               }}
             >
               Se déconnecter

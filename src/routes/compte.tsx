@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Building2, Copy, UserRound } from "lucide-react";
 import { toast } from "sonner";
+import { authClient } from "@/lib/auth/client";
+import { AuthPanel } from "@/components/auth-panel";
 import { CloudCard } from "@/components/cloud-card";
 import { GroupSection } from "@/components/group-section";
 import { PlanBanner } from "@/components/plan-banner";
@@ -171,8 +173,8 @@ function ComptePage() {
             <Button
               variant="outline"
               onClick={() => {
-                signOutUser();
-                toast.message("Déconnecté. Les dossiers restent sur l'appareil.");
+                void authClient.signOut();
+                toast.message("Déconnecté.");
               }}
             >
               Se déconnecter
@@ -182,111 +184,8 @@ function ComptePage() {
       ) : null}
       {session ? <SecurityCard session={session} workspaceCode={workspace && workspace.id !== DEMO_WORKSPACE_ID ? workspace.code : undefined} /> : null}
       {!session ? (
-        <div id="compte-gate" className="scroll-mt-20 space-y-3">
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              className={cn(
-                "min-h-11 rounded-lg text-sm font-medium",
-                gate === "login" ? "bg-accent text-accent-fg" : "bg-surface-2 text-muted",
-              )}
-              onClick={() => setGate("login")}
-            >
-              Se connecter
-            </button>
-            <button
-              type="button"
-              className={cn(
-                "min-h-11 rounded-lg text-sm font-medium",
-                gate === "create" ? "bg-accent text-accent-fg" : "bg-surface-2 text-muted",
-              )}
-              onClick={() => setGate("create")}
-            >
-              Créer un compte
-            </button>
-          </div>
-          {gate === "login" ? (
-            <LoginForm users={users} onLogin={signInUser} onNeedCreate={() => setGate("create")} />
-          ) : (
-            <CreateForm
-              existingEmails={users.map((u) => u.email)}
-              onCreate={async (data) => {
-                if (users.some((u) => u.email === data.email.toLowerCase())) {
-                  toast.error("Cet e-mail existe déjà.");
-                  return;
-                }
-                const applyCloud = useSipr.getState().applyCloudSnapshot;
-                let workspaceId = workspace?.id ?? DEMO_WORKSPACE_ID;
-                if (data.kind === "independant") {
-                  const ws = createWorkspace({
-                    kind: "independant",
-                    name: data.organisation.trim() || `Cabinet ${data.name}`,
-                  });
-                  workspaceId = ws.id;
-                } else if (data.joinCode.trim()) {
-                  const ws = joinWorkspace(data.joinCode);
-                  if (ws) {
-                    workspaceId = ws.id;
-                  } else {
-                    const remote = await pullSnapshot(data.joinCode);
-                    if (!remote.ok) {
-                      toast.error("Code groupe introuvable (local et cloud).");
-                      return;
-                    }
-                    applyCloud(remote.snapshot);
-                    workspaceId = remote.snapshot.workspace.id;
-                  }
-                } else {
-                  const ws = createWorkspace({
-                    kind: "entreprise",
-                    name: data.organisation.trim() || "Groupe SIPP",
-                  });
-                  workspaceId = ws.id;
-                }
-                const { salt, passwordHash } = await hashPassword(data.password);
-                const userId = uid("user");
-                addUser({
-                  id: userId,
-                  name: data.name,
-                  email: data.email.toLowerCase(),
-                  title: data.title,
-                  level: data.level,
-                  organisation: data.organisation,
-                  kind: data.kind,
-                  workspaceId,
-                  salt,
-                  passwordHash,
-                  createdAt: new Date().toISOString(),
-                });
-                const s = useSipr.getState();
-                const ws = s.workspaces.find((w) => w.id === workspaceId);
-                const created = s.users.find((u) => u.id === userId);
-                if (ws && created && ws.id !== DEMO_WORKSPACE_ID) {
-                  const snap = buildSnapshot({
-                    workspace: ws,
-                    visits: s.visits,
-                    anomalies: s.anomalies,
-                    fds: s.fds,
-                    rps: s.rps,
-                    pgp: s.pgp,
-                    users: s.users,
-                    deleted: s.deleted,
-                  });
-                  const pushed = await pushSnapshot(ws.code, ws.id, snap);
-                  const acc = await accountUpsert(created, ws.code);
-                  if (pushed.ok && acc.ok) {
-                    toast.success("Compte créé — 1er mois offert. Cloud prêt : même e-mail sur un autre appareil.");
-                  } else if ((!acc.ok && acc.reason === "setup") || (!pushed.ok && pushed.reason === "setup")) {
-                    toast.success("Compte créé. Mettez à jour le script SQL (Copie cloud) pour le multi-appareils.");
-                  } else {
-                    toast.success("Compte créé — 1er mois offert, session ouverte.");
-                  }
-                } else {
-                  toast.success("Compte créé — 1er mois offert, dossiers liés à cet espace. Session ouverte.");
-                }
-              }}
-            />
-          )}
+        <div id="compte-gate" className="scroll-mt-20">
+          <AuthPanel showSignOut={false} />
         </div>
       ) : null}
 
