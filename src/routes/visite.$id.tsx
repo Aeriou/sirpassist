@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Camera, FileText, MapPin, ScanLine, Users } from "lucide-react";
+import { Camera, FileText, MapPin, Pencil, ScanLine, Users } from "lucide-react";
 import { toast } from "sonner";
 import { AnomalyCard } from "@/components/anomaly-card";
 import { ConfirmDelete } from "@/components/confirm-delete";
@@ -11,7 +11,7 @@ import { SignaturePad } from "@/components/signature-pad";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Field, Input } from "@/components/ui/input";
+import { Field, Input, Textarea } from "@/components/ui/input";
 import { formatCoords, formatShortDate, formatStamp, isoDate } from "@/lib/format";
 import { emptyPlace, formatPlace, placeFromGeo, placeToGeo } from "@/lib/place";
 import { selectWorkspace, useSipr } from "@/lib/store";
@@ -37,6 +37,13 @@ function VisitDetail() {
   const navigate = useNavigate();
   const [signOpen, setSignOpen] = useState(false);
   const [placeOpen, setPlaceOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [infoDraft, setInfoDraft] = useState({
+    company: visit?.company ?? "",
+    interlocutor: visit?.interlocutor ?? "",
+    date: visit?.date ?? "",
+    notes: visit?.notes ?? "",
+  });
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [advisorSig, setAdvisorSig] = useState<string | undefined>();
   const [siteSig, setSiteSig] = useState<string | undefined>();
@@ -67,6 +74,27 @@ function VisitDetail() {
     });
     setPlaceOpen(false);
     toast.success("Lieu de visite mis à jour.");
+  }
+
+  function openInfo() {
+    setInfoDraft({
+      company: current.company ?? "",
+      interlocutor: current.interlocutor ?? "",
+      date: current.date ?? "",
+      notes: current.notes ?? "",
+    });
+    setInfoOpen(true);
+  }
+
+  function saveInfo() {
+    updateVisit(current.id, {
+      company: infoDraft.company.trim() || current.company,
+      interlocutor: infoDraft.interlocutor.trim(),
+      date: infoDraft.date || current.date,
+      notes: infoDraft.notes.trim() || undefined,
+    });
+    setInfoOpen(false);
+    toast.success("Informations du dossier mises à jour.");
   }
 
   function confirmClose() {
@@ -162,6 +190,10 @@ function VisitDetail() {
               <MapPin />
               Lieu
             </Button>
+            <Button variant="outline" onClick={openInfo}>
+              <Pencil />
+              Modifier les infos
+            </Button>
             {visit.status === "en_cours" ? (
               <Button variant="outline" onClick={() => setSignOpen(true)}>
                 Signer et clôturer
@@ -242,6 +274,47 @@ function VisitDetail() {
           <Button className="mt-3 w-full" onClick={savePlace} disabled={!draftPlace.verified}>
             Enregistrer le lieu
           </Button>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={infoOpen} onOpenChange={setInfoOpen}>
+        <DialogContent
+          className="max-h-[90vh] w-[min(100%-1.5rem,32rem)] overflow-y-auto"
+          title="Informations du dossier"
+          description="Corriger une erreur de saisie sans recréer le dossier."
+        >
+          <div className="space-y-3">
+            <Field label="Entreprise visée">
+              <Input
+                value={infoDraft.company}
+                onChange={(e) => setInfoDraft({ ...infoDraft, company: e.target.value })}
+              />
+            </Field>
+            <Field label="Interlocuteur">
+              <Input
+                value={infoDraft.interlocutor}
+                onChange={(e) => setInfoDraft({ ...infoDraft, interlocutor: e.target.value })}
+                placeholder="Chef d'atelier, gérant…"
+              />
+            </Field>
+            <Field label="Date">
+              <Input
+                type="date"
+                value={infoDraft.date}
+                onChange={(e) => setInfoDraft({ ...infoDraft, date: e.target.value })}
+              />
+            </Field>
+            <Field label="Notes">
+              <Textarea
+                value={infoDraft.notes}
+                onChange={(e) => setInfoDraft({ ...infoDraft, notes: e.target.value })}
+                placeholder="Contexte, accès, points à revoir…"
+              />
+            </Field>
+            <Button className="w-full" onClick={saveInfo}>
+              Enregistrer
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 

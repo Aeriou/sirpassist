@@ -365,11 +365,20 @@ function ProfileButton() {
 function ProfileDialog({ onReset, onClose }: { onReset: () => void; onClose: () => void }) {
   const profile = useSipr((s) => s.profile);
   const setProfile = useSipr((s) => s.setProfile);
+  const patchSessionUser = useSipr((s) => s.patchSessionUser);
   const sessionUserId = useSipr((s) => s.sessionUserId);
   const users = useSipr((s) => s.users);
   const signOutUser = useSipr((s) => s.signOutUser);
   const workspace = useSipr(selectWorkspace);
   const session = users.find((u) => u.id === sessionUserId);
+
+  // Éditer l'identité locale ET, si connecté, le compte — sinon la modif est
+  // écrasée à la prochaine connexion.
+  function updateIdentity(patch: { name?: string; title?: string; level?: AdvisorLevel }) {
+    setProfile(patch);
+    if (session) patchSessionUser(patch);
+  }
+
   return (
     <DialogContent
       title="Conseiller"
@@ -382,6 +391,45 @@ function ProfileDialog({ onReset, onClose }: { onReset: () => void; onClose: () 
             {workspace.kind === "entreprise" ? ` · code ${workspace.code}` : ""}
           </p>
         ) : null}
+
+        <div className="space-y-3">
+          <p className="text-xs font-medium tracking-wide text-accent">Mes informations</p>
+          <Field label="Nom">
+            <Input
+              value={profile.name}
+              onChange={(e) => updateIdentity({ name: e.target.value })}
+            />
+          </Field>
+          <Field label="Fonction">
+            <Input
+              value={profile.title}
+              onChange={(e) => updateIdentity({ title: e.target.value })}
+            />
+          </Field>
+          <fieldset>
+            <legend className="mb-2 text-xs font-medium tracking-wide text-muted">Niveau</legend>
+            <div className="grid gap-1.5">
+              {LEVELS.map((l) => (
+                <button
+                  key={l.value}
+                  type="button"
+                  onClick={() => updateIdentity({ level: l.value })}
+                  className={cn(
+                    "flex min-h-11 items-center justify-between rounded-lg px-3 text-left text-sm",
+                    profile.level === l.value
+                      ? "bg-accent text-accent-fg"
+                      : "bg-surface-2 text-fg shadow-[var(--shadow-border)]",
+                  )}
+                >
+                  <span>{l.label}</span>
+                  <span className="font-mono text-xs">{l.tag}</span>
+                </button>
+              ))}
+            </div>
+          </fieldset>
+          <p className="text-xs text-muted">Enregistré automatiquement.</p>
+        </div>
+
         {session ? (
           <>
             <p className="rounded-lg bg-accent-dim px-3 py-2 text-sm text-accent">
@@ -405,48 +453,25 @@ function ProfileDialog({ onReset, onClose }: { onReset: () => void; onClose: () 
             appareil (code + e-mail) et ouvre l'illimité : 1er mois offert, puis 15 € / mois.
           </p>
         )}
-        <Button variant="outline" className="w-full" asChild>
-          <Link to="/" onClick={onClose}>
-            Accueil
-          </Link>
-        </Button>
-        <Button variant="outline" className="w-full" asChild>
-          <Link to="/support" onClick={onClose}>
-            Support · bug ou amélioration
-          </Link>
-        </Button>
-        <Button className="w-full" asChild>
-          <Link to="/compte" onClick={onClose}>
-            {session ? "Comptes · entreprise ou indépendant" : "Se connecter / créer un compte"}
-          </Link>
-        </Button>
-        <Field label="Nom">
-          <Input value={profile.name} onChange={(e) => setProfile({ name: e.target.value })} />
-        </Field>
-        <Field label="Fonction">
-          <Input value={profile.title} onChange={(e) => setProfile({ title: e.target.value })} />
-        </Field>
-        <fieldset>
-          <legend className="mb-2 text-xs font-medium tracking-wide text-muted">Niveau</legend>
-          <div className="grid gap-1.5">
-            {LEVELS.map((l) => (
-              <button
-                key={l.value}
-                type="button"
-                onClick={() => setProfile({ level: l.value })}
-                className={cn(
-                  "flex min-h-11 items-center justify-between rounded-lg px-3 text-left text-sm",
-                  profile.level === l.value
-                    ? "bg-accent text-accent-fg"
-                    : "bg-surface-2 text-fg shadow-[var(--shadow-border)]",
-                )}
-              >
-                <span>{l.label}</span>
-                <span className="font-mono text-xs">{l.tag}</span>
-              </button>
-            ))}
-          </div>
-        </fieldset>
+
+        <div className="grid gap-2">
+          <Button variant="outline" className="w-full" asChild>
+            <Link to="/" onClick={onClose}>
+              Accueil
+            </Link>
+          </Button>
+          <Button variant="outline" className="w-full" asChild>
+            <Link to="/support" onClick={onClose}>
+              Support · bug ou amélioration
+            </Link>
+          </Button>
+          <Button className="w-full" asChild>
+            <Link to="/compte" onClick={onClose}>
+              {session ? "Comptes · entreprise ou indépendant" : "Se connecter / créer un compte"}
+            </Link>
+          </Button>
+        </div>
+
         <Button variant="outline" className="w-full" onClick={onReset}>
           Réinitialiser la démo
         </Button>

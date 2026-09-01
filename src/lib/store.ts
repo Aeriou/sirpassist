@@ -655,17 +655,24 @@ export const useSipr = create<State>()(
           rps: rps.filter((r) => visitWorkspaceId(r) !== id),
         });
         if (!nextWs.length) {
-          const d = demo();
+          // Dernier espace supprimé : on crée un espace VIDE plutôt que de
+          // ressusciter la démo (l'espace supprimé + ses données de démo).
+          const wsId = uid("ws");
+          const fresh: Workspace = {
+            id: wsId,
+            kind: "independant",
+            name: "Mon espace",
+            code: genOrgCode(),
+            createdAt: isoDate(),
+          };
+          const plan = emptyPgp(fresh.name, get().profile.name);
           set({
-            workspaces: d.workspaces,
-            visits: [...d.visits, ...get().visits],
-            anomalies: [...d.anomalies, ...get().anomalies],
-            fds: [...d.fds, ...get().fds],
-            rps: [...d.rps, ...get().rps],
-            pgp: d.pgp,
-            pgpByWorkspace: { ...get().pgpByWorkspace, [DEMO_WORKSPACE_ID]: d.pgp },
-            activeWorkspaceId: DEMO_WORKSPACE_ID,
+            workspaces: [fresh],
+            pgp: plan,
+            pgpByWorkspace: { ...get().pgpByWorkspace, [wsId]: plan },
+            activeWorkspaceId: wsId,
           });
+          get().switchWorkspace(wsId);
           return true;
         }
         const fallback =
