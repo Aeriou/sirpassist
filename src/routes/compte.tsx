@@ -176,7 +176,6 @@ function ComptePage() {
           </div>
         </Card>
       ) : null}
-      {session ? <SecurityCard session={session} workspaceCode={workspace && workspace.id !== DEMO_WORKSPACE_ID ? workspace.code : undefined} /> : null}
       {!session ? (
         <div id="compte-gate" className="scroll-mt-20">
           <AuthPanel showSignOut={false} />
@@ -192,8 +191,6 @@ function ComptePage() {
           organisation={session?.organisation || workspace.name}
         />
       ) : null}
-
-      <CloudCard />
 
       <GroupSection />
 
@@ -223,28 +220,6 @@ function ComptePage() {
         </Card>
       ) : null}
 
-      <JoinForm
-        onJoin={async (code) => {
-          const applyCloud = useSipr.getState().applyCloudSnapshot;
-          const local = joinWorkspace(code);
-          const remote = await pullSnapshot(code);
-          if (local) {
-            if (remote.ok) applyCloud(remote.snapshot);
-            toast.success(`Rejoint « ${local.name} » — PGP commun au groupe.`);
-            return;
-          }
-          if (remote.ok) {
-            applyCloud(remote.snapshot);
-            toast.success(`Espace « ${remote.snapshot.workspace.name} » chargé depuis le cloud.`);
-            return;
-          }
-          if (remote.reason === "setup") {
-            toast.error("Copie cloud pas encore initialisée — exécutez le SQL une fois.");
-            return;
-          }
-          toast.error("Code inconnu. Vérifiez le code groupe, ou synchronisez d'abord l'espace d'origine.");
-        }}
-      />
     </div>
   );
 }

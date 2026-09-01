@@ -32,7 +32,7 @@ import { readPgpVue, type PgpVue } from "@/components/pgp-tabs";
 
 const NAV = [
   { to: "/", label: "Accueil", icon: House, primary: false },
-  { to: "/terrain", label: "Terrain", icon: ClipboardList, primary: false },
+  { to: "/terrain", label: "Mes visites", icon: ClipboardList, primary: false },
   { to: "/signalement", label: "Signaler", icon: Camera, primary: true },
   { to: "/pgp", label: "PGP", icon: ShieldCheck, primary: false },
   { to: "/fds", label: "FDS", icon: ScanLine, primary: false },
@@ -304,7 +304,7 @@ function IconLink({
 
 function pageTitle(path: string, search?: Record<string, unknown>) {
   if (path === "/") return "Accueil";
-  if (path.startsWith("/terrain")) return "Terrain";
+  if (path.startsWith("/terrain")) return "Mes visites";
   if (path.startsWith("/signalement")) return "Signaler";
   if (path.startsWith("/pgp")) return search?.vue === "actions" ? "Actions PAA" : "Récap PAA";
   if (path.startsWith("/paa")) return "PAA";
