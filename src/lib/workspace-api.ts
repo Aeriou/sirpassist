@@ -54,15 +54,20 @@ export const apiListWorkspaces = createServerFn({ method: "POST" })
     const rows = await wdb.listMyWorkspaces(sql, context.userId);
     return {
       ok: true as const,
-      workspaces: rows.map((w) => ({
-        id: w.id,
-        name: w.name,
-        kind: w.kind,
-        code: w.join_code,
-        role: w.role === "owner" ? ("owner" as const) : ("member" as const),
-        status: w.status === "active" ? ("active" as const) : ("pending" as const),
-        isOwner: w.owner_user_id === context.userId,
-      })),
+      workspaces: rows.map((w) => {
+        const pending = w.status !== "active";
+        return {
+          id: w.id,
+          name: w.name,
+          // Un membre en attente ne reçoit que le nom : ni le code, ni le type,
+          // ni le rôle réel tant que le propriétaire n'a pas validé.
+          kind: pending ? "" : w.kind,
+          code: pending ? "" : w.join_code,
+          role: !pending && w.role === "owner" ? ("owner" as const) : ("member" as const),
+          status: pending ? ("pending" as const) : ("active" as const),
+          isOwner: !pending && w.owner_user_id === context.userId,
+        };
+      }),
     };
   });
 
