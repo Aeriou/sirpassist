@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { authClient } from "@/lib/auth/client";
+import { DEFAULT_PROFILE } from "@/lib/seed";
 import { useSipr } from "@/lib/store";
 import { DEMO_WORKSPACE_ID } from "@/lib/workspace";
 
@@ -65,9 +66,15 @@ export function SessionBridge() {
       return;
     }
 
-    // Déconnecté de Better Auth : retirer une session locale issue du pont.
+    // Déconnecté de Better Auth : retirer la session locale issue du pont et
+    // revenir à l'état invité (profil + espace démo) plutôt que de garder le
+    // nom / l'espace du compte précédent affichés.
     if (st.sessionUserId && st.sessionUserId.startsWith("ba_")) {
       st.signOutUser();
+      st.setProfile({ ...DEFAULT_PROFILE });
+      if (st.workspaces.some((w) => w.id === DEMO_WORKSPACE_ID)) {
+        st.switchWorkspace(DEMO_WORKSPACE_ID);
+      }
     }
   }, [baUserId, isPending, hydrated]);
 
