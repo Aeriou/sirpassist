@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth/client";
+import { doSignOut } from "@/lib/auth/sign-out";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Field, Input } from "@/components/ui/input";
@@ -53,17 +54,6 @@ export function AuthPanel({ showSignOut = true }: { showSignOut?: boolean }) {
     }
   }
 
-  async function signOut() {
-    setBusy(true);
-    try {
-      await authClient.signOut();
-      await refetch?.();
-      toast.message("Déconnecté.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   if (isPending) {
     return (
       <Card>
@@ -82,7 +72,7 @@ export function AuthPanel({ showSignOut = true }: { showSignOut?: boolean }) {
           <p className="text-xs text-muted">E-mail non vérifié (confirmation par e-mail à venir).</p>
         ) : null}
         {showSignOut ? (
-          <Button variant="outline" onClick={() => void signOut()} disabled={busy}>
+          <Button variant="outline" onClick={doSignOut}>
             Se déconnecter
           </Button>
         ) : null}

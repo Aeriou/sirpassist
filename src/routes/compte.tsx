@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Building2, Copy, UserRound } from "lucide-react";
 import { toast } from "sonner";
-import { authClient } from "@/lib/auth/client";
 import { AuthPanel } from "@/components/auth-panel";
+import { doSignOut } from "@/lib/auth/sign-out";
 import { CloudCard } from "@/components/cloud-card";
 import { GroupSection } from "@/components/group-section";
 import { PlanBanner } from "@/components/plan-banner";
@@ -170,13 +170,7 @@ function ComptePage() {
             </Button>
           ) : null}
           <div className="flex flex-col gap-2 sm:flex-row">
-            <Button
-              variant="outline"
-              onClick={() => {
-                void authClient.signOut();
-                toast.message("Déconnecté.");
-              }}
-            >
+            <Button variant="outline" onClick={doSignOut}>
               Se déconnecter
             </Button>
           </div>

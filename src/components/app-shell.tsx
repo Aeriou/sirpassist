@@ -8,6 +8,7 @@ import {
   House,
   LayoutDashboard,
   LifeBuoy,
+  LogOut,
   ScanLine,
   ShieldCheck,
   Users,
@@ -19,7 +20,7 @@ import { Button } from "./ui/button";
 import { Dialog, DialogContent } from "./ui/dialog";
 import { Field, Input } from "./ui/input";
 import { useOnline } from "@/lib/online";
-import { authClient } from "@/lib/auth/client";
+import { doSignOut } from "@/lib/auth/sign-out";
 import { toast } from "sonner";
 import { buildReminders } from "@/lib/reminders";
 import { selectWorkspace, useSipr, useWorkspaceAnomalies } from "@/lib/store";
@@ -48,6 +49,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const urlSearch = useRouterState({ select: (s) => s.location.search as Record<string, unknown> });
   const [pgpVue, setPgpVue] = useState<PgpVue>("recap");
   const profile = useSipr((s) => s.profile);
+  const sessionUserId = useSipr((s) => s.sessionUserId);
   const resetDemo = useSipr((s) => s.resetDemo);
   const pgp = useSipr((s) => s.pgp);
   const anomalies = useWorkspaceAnomalies();
@@ -133,6 +135,16 @@ export function AppShell({ children }: { children: ReactNode }) {
           <SideLink to="/support" active={pathname.startsWith("/support")} icon={LifeBuoy}>
             Support
           </SideLink>
+          {sessionUserId ? (
+            <button
+              type="button"
+              onClick={doSignOut}
+              className="flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium text-muted transition-colors duration-150 hover:bg-surface-2 hover:text-fg"
+            >
+              <LogOut className="size-4" />
+              Se déconnecter
+            </button>
+          ) : null}
         </nav>
         <div className="p-3">
           <button type="button" className="w-full text-left" onClick={() => setOpen(true)}>
@@ -439,9 +451,8 @@ function ProfileDialog({ onReset, onClose }: { onReset: () => void; onClose: () 
               variant="outline"
               className="w-full"
               onClick={() => {
-                void authClient.signOut();
                 onClose();
-                toast.message("Déconnecté.");
+                doSignOut();
               }}
             >
               Se déconnecter
