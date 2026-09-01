@@ -79,6 +79,7 @@ export async function createWorkspace(
   return { id, name: wsName, kind, code };
 }
 
+/** Espaces où l'utilisateur est membre actif OU a une demande en attente. */
 export async function listMyWorkspaces(sql: Sql, userId: string) {
   return sql<{
     id: string;
@@ -87,13 +88,27 @@ export async function listMyWorkspaces(sql: Sql, userId: string) {
     join_code: string;
     owner_user_id: string;
     role: string;
+    status: string;
   }>`
-    select w.id, w.name, w.kind, w.join_code, w.owner_user_id, m.role
+    select w.id, w.name, w.kind, w.join_code, w.owner_user_id, m.role, m.status
     from workspace w
     join workspace_member m on m.workspace_id = w.id
-    where m.user_id = ${userId} and m.status = 'active'
+    where m.user_id = ${userId} and m.status in ('active', 'pending')
     order by w.created_at
   `;
+}
+
+/** Annuler sa propre demande en attente (mauvais code, changement d'avis). */
+export async function cancelJoinRequest(
+  sql: Sql,
+  workspaceId: string,
+  userId: string,
+): Promise<{ ok: true }> {
+  await sql`
+    delete from workspace_member
+    where workspace_id = ${workspaceId} and user_id = ${userId} and status = 'pending'
+  `;
+  return { ok: true };
 }
 
 export async function requestJoin(

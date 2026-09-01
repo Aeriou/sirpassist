@@ -60,9 +60,18 @@ export const apiListWorkspaces = createServerFn({ method: "POST" })
         kind: w.kind,
         code: w.join_code,
         role: w.role === "owner" ? ("owner" as const) : ("member" as const),
+        status: w.status === "active" ? ("active" as const) : ("pending" as const),
         isOwner: w.owner_user_id === context.userId,
       })),
     };
+  });
+
+export const apiCancelJoinRequest = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { workspaceId: string }) => input)
+  .handler(async ({ data, context }) => {
+    const sql = await getSqlClient();
+    return wdb.cancelJoinRequest(sql, data.workspaceId, context.userId);
   });
 
 export const apiRequestJoin = createServerFn({ method: "POST" })

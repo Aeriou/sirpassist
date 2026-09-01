@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "@tanstack/react-router";
-import { Copy } from "lucide-react";
+import { Copy, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth/client";
 import {
+  apiCancelJoinRequest,
   apiCreateWorkspace,
   apiDecideJoin,
   apiListJoinRequests,
@@ -22,6 +23,7 @@ type Group = {
   kind: string;
   code: string;
   role: "owner" | "member";
+  status: "active" | "pending";
   isOwner: boolean;
 };
 
@@ -35,8 +37,8 @@ type Member = {
 };
 
 /**
- * Groupes validés (nouveau modèle serveur). Rejoindre = demande ; le
- * propriétaire valide avant tout accès. Isolé de l'ancienne carte « Espaces ».
+ * Groupes validés (modèle serveur). Rejoindre = demande ; le propriétaire
+ * valide avant tout accès. Isolé de l'ancienne carte « Espaces ».
  */
 export function GroupSection() {
   const { data: session, isPending } = authClient.useSession();
@@ -84,6 +86,9 @@ export function GroupSection() {
     );
   }
 
+  const active = groups?.filter((g) => g.status === "active") ?? [];
+  const pending = groups?.filter((g) => g.status === "pending") ?? [];
+
   return (
     <div className="space-y-4">
       <Card className="space-y-4">
@@ -98,7 +103,10 @@ export function GroupSection() {
         <JoinGroupForm busy={busy} setBusy={setBusy} onDone={reload} />
       </Card>
 
-      {groups?.map((g) => (
+      {pending.map((g) => (
+        <PendingCard key={g.id} group={g} onChange={reload} />
+      ))}
+      {active.map((g) => (
         <GroupCard key={g.id} group={g} onChange={reload} />
       ))}
       {groups && groups.length === 0 ? (
@@ -215,28 +223,83 @@ function JoinGroupForm({
   );
 }
 
+/** Vue côté demandeur tant que le propriétaire n'a pas validé. */
+function PendingCard({ group, onChange }: { group: Group; onChange: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+
+  async function cancel() {
+    setBusy(true);
+    try {
+      const res = await apiCancelJoinRequest({ data: { workspaceId: group.id } });
+      if (res.ok) {
+        toast.message("Demande annulée.");
+        await onChange();
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="space-y-2">
+      <p className="text-xs font-medium tracking-wide text-warn">Demande en attente</p>
+      <p className="text-sm">
+        Demande envoyée à <span className="font-medium">« {group.name} »</span>. Vous y aurez accès
+        dès que le responsable du groupe l'aura validée.
+      </p>
+      <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => void cancel()}>
+        Annuler la demande
+      </Button>
+    </Card>
+  );
+}
+
 function GroupCard({ group, onChange }: { group: Group; onChange: () => Promise<void> }) {
   const [requests, setRequests] = useState<JoinRequest[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const timer = useRef<number | null>(null);
 
-  const loadOwnerData = useCallback(async () => {
-    if (!group.isOwner) return;
+  const loadGroupData = useCallback(async () => {
     try {
-      const [rq, mb] = await Promise.all([
-        apiListJoinRequests({ data: { workspaceId: group.id } }),
+      // Tout membre actif voit la liste des membres ; seules les demandes en
+      // attente sont réservées au propriétaire.
+      const tasks: [Promise<unknown>, Promise<unknown>] = [
         apiListMembers({ data: { workspaceId: group.id } }),
-      ]);
-      if (rq.ok) setRequests(rq.requests);
+        group.isOwner
+          ? apiListJoinRequests({ data: { workspaceId: group.id } })
+          : Promise.resolve({ ok: false } as const),
+      ];
+      const [mb, rq] = (await Promise.all(tasks)) as [
+        Awaited<ReturnType<typeof apiListMembers>>,
+        Awaited<ReturnType<typeof apiListJoinRequests>>,
+      ];
       if (mb.ok) setMembers(mb.members);
+      if (rq.ok) setRequests(rq.requests);
     } catch {
       /* ignore */
     }
   }, [group.id, group.isOwner]);
 
   useEffect(() => {
-    void loadOwnerData();
-  }, [loadOwnerData]);
+    void loadGroupData();
+    if (!group.isOwner) return;
+    // Rafraîchit les demandes en attente toutes les 20 s pendant que la page est ouverte.
+    timer.current = window.setInterval(() => void loadGroupData(), 20_000);
+    return () => {
+      if (timer.current) window.clearInterval(timer.current);
+    };
+  }, [loadGroupData, group.isOwner]);
+
+  async function manualRefresh() {
+    setRefreshing(true);
+    try {
+      await loadGroupData();
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   async function decide(userId: string, approve: boolean) {
     setBusy(true);
@@ -246,7 +309,7 @@ function GroupCard({ group, onChange }: { group: Group; onChange: () => Promise<
       });
       if (res.ok) {
         toast.success(approve ? "Membre validé." : "Demande refusée.");
-        await loadOwnerData();
+        await loadGroupData();
         await onChange();
       } else {
         toast.error("Action impossible.");
@@ -263,7 +326,7 @@ function GroupCard({ group, onChange }: { group: Group; onChange: () => Promise<
       const res = await apiRemoveMember({ data: { workspaceId: group.id, targetUserId: userId } });
       if (res.ok) {
         toast.message("Membre retiré.");
-        await loadOwnerData();
+        await loadGroupData();
       } else {
         toast.error(
           res.reason === "owner"
@@ -302,88 +365,94 @@ function GroupCard({ group, onChange }: { group: Group; onChange: () => Promise<
       </div>
 
       {group.isOwner ? (
-        <>
-          <div className="space-y-2 border-t border-border pt-3">
+        <div className="space-y-2 border-t border-border pt-3">
+          <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-medium tracking-wide text-accent">
               Demandes en attente ({requests.length})
             </p>
-            {requests.length === 0 ? (
-              <p className="text-sm text-muted">Aucune demande.</p>
-            ) : (
-              <ul className="space-y-2">
-                {requests.map((r) => (
-                  <li
-                    key={r.user_id}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-2 p-2"
-                  >
-                    <span className="text-sm">
-                      <span className="font-medium">{r.name || "—"}</span>
-                      <span className="text-muted"> · {r.email}</span>
-                    </span>
-                    <span className="flex gap-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        disabled={busy}
-                        onClick={() => void decide(r.user_id, true)}
-                      >
-                        Valider
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        disabled={busy}
-                        onClick={() => void decide(r.user_id, false)}
-                      >
-                        Refuser
-                      </Button>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 text-xs text-muted hover:text-fg"
+              onClick={() => void manualRefresh()}
+              disabled={refreshing}
+            >
+              <RefreshCw className={refreshing ? "size-3.5 animate-spin" : "size-3.5"} />
+              Rafraîchir
+            </button>
           </div>
-
-          <div className="space-y-2 border-t border-border pt-3">
-            <p className="text-xs font-medium tracking-wide text-accent">
-              Membres ({members.length})
-            </p>
-            <ul className="space-y-1.5">
-              {members.map((m) => (
+          {requests.length === 0 ? (
+            <p className="text-sm text-muted">Aucune demande.</p>
+          ) : (
+            <ul className="space-y-2">
+              {requests.map((r) => (
                 <li
-                  key={m.userId}
-                  className="flex flex-wrap items-center justify-between gap-2"
+                  key={r.user_id}
+                  className="flex flex-col gap-2 rounded-lg bg-surface-2 p-2 sm:flex-row sm:items-center sm:justify-between"
                 >
-                  <span className="text-sm">
-                    <span className="font-medium">{m.name || "—"}</span>
-                    <span className="text-muted">
-                      {" · "}
-                      {m.email}
-                      {m.role === "owner" ? " · propriétaire" : ""}
-                    </span>
+                  <span className="min-w-0 text-sm">
+                    <span className="font-medium">{r.name || "—"}</span>
+                    <span className="break-all text-muted"> · {r.email}</span>
                   </span>
-                  {m.role !== "owner" && !m.isSelf ? (
+                  <span className="flex shrink-0 gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => void decide(r.user_id, true)}
+                    >
+                      Valider
+                    </Button>
                     <Button
                       type="button"
                       size="sm"
                       variant="ghost"
                       disabled={busy}
-                      onClick={() => void removeMember(m.userId)}
+                      onClick={() => void decide(r.user_id, false)}
                     >
-                      Retirer
+                      Refuser
                     </Button>
-                  ) : null}
+                  </span>
                 </li>
               ))}
             </ul>
-          </div>
-        </>
-      ) : (
-        <p className="border-t border-border pt-3 text-sm text-muted">
-          Vous êtes membre de ce groupe.
+          )}
+        </div>
+      ) : null}
+
+      <div className="space-y-2 border-t border-border pt-3">
+        <p className="text-xs font-medium tracking-wide text-accent">
+          Membres ({members.length})
         </p>
-      )}
+        <ul className="space-y-1.5">
+          {members.map((m) => (
+            <li
+              key={m.userId}
+              className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <span className="min-w-0 text-sm">
+                <span className="font-medium">{m.name || "—"}</span>
+                {m.isSelf ? <span className="text-muted"> (vous)</span> : null}
+                <span className="break-all text-muted">
+                  {" · "}
+                  {m.email}
+                  {m.role === "owner" ? " · propriétaire" : ""}
+                </span>
+              </span>
+              {group.isOwner && m.role !== "owner" && !m.isSelf ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => void removeMember(m.userId)}
+                >
+                  Retirer
+                </Button>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      </div>
 
       <p className="text-xs text-subtle">
         Partage des dossiers du groupe entre membres validés : prochaine mise à jour.

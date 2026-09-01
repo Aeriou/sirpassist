@@ -81,6 +81,25 @@ const req2 = await wdb.requestJoin(sql, {
 });
 check("requestJoin idempotent (toujours pending, pas de doublon)", req2.ok === true && req2.status === "pending");
 
+// --- le demandeur voit sa demande en attente dans listMyWorkspaces ---
+const joinerList = await wdb.listMyWorkspaces(sql, JOINER);
+check(
+  "listMyWorkspaces renvoie la demande en attente au demandeur",
+  joinerList.length === 1 && joinerList[0]!.status === "pending",
+);
+
+// --- annulation de sa propre demande, puis re-demande ---
+await wdb.cancelJoinRequest(sql, created.id, JOINER);
+const afterCancel = await wdb.listMyWorkspaces(sql, JOINER);
+check("après annulation, plus de demande listée", afterCancel.length === 0);
+await wdb.requestJoin(sql, {
+  userId: JOINER,
+  email: "joiner@example.com",
+  name: "Jeanne Joiner",
+  code: created.code,
+});
+check("re-demande possible après annulation", (await wdb.myMembership(sql, created.id, JOINER)).status === "pending");
+
 // --- le pending NE PEUT PAS lire les données ---
 const pullPending = await wdb.pullWorkspaceData(sql, created.id, JOINER);
 check("membre en attente -> pas d'accès aux données", pullPending.ok === false && pullPending.reason === "forbidden");
