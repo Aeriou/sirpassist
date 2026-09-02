@@ -3,6 +3,7 @@ import { authClient } from "@/lib/auth/client";
 import { apiGetMyPlan } from "@/lib/plan-api";
 import { DEFAULT_PROFILE } from "@/lib/seed";
 import { useSipr } from "@/lib/store";
+import { applyStoreScope } from "@/lib/store-scope";
 import { DEMO_WORKSPACE_ID } from "@/lib/workspace";
 
 /**
@@ -10,9 +11,10 @@ import { DEMO_WORKSPACE_ID } from "@/lib/workspace";
  *
  * Tant que la migration complète des données n'est pas faite, l'app travaille
  * toujours sur le store zustand. Ce composant garantit que : connecté via
- * `/connexion` ⇒ connecté PARTOUT (avatar, espace, profil), et que l'espace
- * démo disparaît dès qu'un compte est ouvert. Déconnexion Better Auth ⇒
- * déconnexion locale.
+ * `/connexion` ⇒ connecté PARTOUT (avatar, espace, profil), que l'espace démo
+ * disparaît dès qu'un compte est ouvert, et que chaque compte a ses propres
+ * données locales (clé localStorage dédiée, cf. `applyStoreScope`). Déconnexion
+ * Better Auth ⇒ déconnexion locale + retour à l'espace démo.
  *
  * Monté une fois dans `__root.tsx`. Ne rend rien.
  */
@@ -20,20 +22,26 @@ export function SessionBridge() {
   const { data, isPending } = authClient.useSession();
   const baUserId = data?.user?.id ?? null;
 
-  // Attendre que le store local soit réhydraté depuis localStorage, sinon on
-  // recréerait un compte/espace alors qu'il en existe déjà un.
-  const [hydrated, setHydrated] = useState(() => useSipr.persist.hasHydrated());
+  // Le store persistant est cloisonné par compte. On attend que la session
+  // soit résolue avant de réhydrater, pour ne pas charger l'état d'un compte
+  // puis basculer sur un autre. `scopedFor` = compte pour lequel le store est
+  // actuellement chargé (`undefined` tant que rien n'est chargé).
+  const [scopedFor, setScopedFor] = useState<string | null | undefined>(undefined);
   useEffect(() => {
-    if (hydrated) return;
-    if (useSipr.persist.hasHydrated()) {
-      setHydrated(true);
-      return;
-    }
-    return useSipr.persist.onFinishHydration(() => setHydrated(true));
-  }, [hydrated]);
+    if (isPending) return;
+    let cancelled = false;
+    void applyStoreScope(baUserId).then(() => {
+      if (!cancelled) setScopedFor(baUserId);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [baUserId, isPending]);
+
+  const ready = !isPending && scopedFor === baUserId;
 
   useEffect(() => {
-    if (isPending || !hydrated) return;
+    if (!ready) return;
     const st = useSipr.getState();
     const baUser = data?.user;
 
@@ -98,7 +106,7 @@ export function SessionBridge() {
         st.switchWorkspace(DEMO_WORKSPACE_ID);
       }
     }
-  }, [baUserId, isPending, hydrated]);
+  }, [baUserId, ready]);
 
   return null;
 }

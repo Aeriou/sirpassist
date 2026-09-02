@@ -68,9 +68,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       ? conflicts.filter((c) => c.status === "ouvert").length
       : 0;
 
-  useEffect(() => {
-    void useSipr.persist.rehydrate();
-  }, []);
+  // La réhydratation du store est pilotée par <SessionBridge> (clé localStorage
+  // par compte). Ne pas réhydrater ici : cela chargerait la clé par défaut
+  // avant que le compte soit connu.
 
   useEffect(() => {
     setPgpVue(readPgpVue());

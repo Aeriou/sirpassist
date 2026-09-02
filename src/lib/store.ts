@@ -769,12 +769,16 @@ export const useSipr = create<State>()(
       name: "siprassist-v5",
       skipHydration: true,
       merge: (persisted, current) => {
+        // Base = un état démo neuf, jamais l'état en mémoire du compte
+        // précédent : au changement de compte (clé localStorage différente),
+        // une clé vide doit donner un espace vierge, pas les données de l'autre.
+        const fresh = demo();
         const p = (persisted ?? {}) as Partial<ReturnType<typeof demo>> & {
           pgpByWorkspace?: Record<string, PgpPlan>;
           workspaces?: Workspace[];
           activeWorkspaceId?: string;
         };
-        const visits = (p.visits ?? current.visits).map((v) =>
+        const visits = (p.visits ?? fresh.visits).map((v) =>
           ({
             ...v,
             demo: isExample(v.id, v.demo) || v.demo,
@@ -782,7 +786,7 @@ export const useSipr = create<State>()(
             name: v.name || v.company,
           }),
         );
-        const anomalies = (p.anomalies ?? current.anomalies).map((a) => {
+        const anomalies = (p.anomalies ?? fresh.anomalies).map((a) => {
           const demoFlag = isExample(a.id, a.demo);
           return {
             ...a,
@@ -791,20 +795,20 @@ export const useSipr = create<State>()(
             workspaceId: a.workspaceId || DEMO_WORKSPACE_ID,
           };
         });
-        const fds = (p.fds ?? current.fds).map((f) => ({
+        const fds = (p.fds ?? fresh.fds).map((f) => ({
           ...f,
           demo: isExample(f.id, f.demo) ? true : f.demo,
           workspaceId: f.workspaceId || DEMO_WORKSPACE_ID,
         }));
-        const rps = ((p as { rps?: RpsSituation[] }).rps ?? current.rps ?? []).map((r) => ({
+        const rps = ((p as { rps?: RpsSituation[] }).rps ?? fresh.rps ?? []).map((r) => ({
           ...r,
           demo: isExample(r.id, r.demo) ? true : r.demo,
           workspaceId: r.workspaceId || DEMO_WORKSPACE_ID,
         }));
         const workspaces = p.workspaces?.length
           ? p.workspaces
-          : current.workspaces;
-        const activeWorkspaceId = p.activeWorkspaceId ?? current.activeWorkspaceId;
+          : fresh.workspaces;
+        const activeWorkspaceId = p.activeWorkspaceId ?? fresh.activeWorkspaceId;
         const pgp = p.pgp
           ? {
               ...p.pgp,
@@ -812,14 +816,14 @@ export const useSipr = create<State>()(
                 isExample(l.id, l.demo) ? { ...l, demo: true } : l,
               ),
             }
-          : current.pgp;
+          : fresh.pgp;
         const pgpByWorkspace: Record<string, PgpPlan> = {
-          ...current.pgpByWorkspace,
+          ...fresh.pgpByWorkspace,
           ...(p.pgpByWorkspace ?? {}),
         };
         pgpByWorkspace[activeWorkspaceId] = pgp;
         if (!pgpByWorkspace[DEMO_WORKSPACE_ID]) {
-          pgpByWorkspace[DEMO_WORKSPACE_ID] = current.pgp;
+          pgpByWorkspace[DEMO_WORKSPACE_ID] = fresh.pgp;
         }
         const users = (p.users ?? []).map((u) => {
           const createdAt = u.createdAt || isoDate();
@@ -843,7 +847,8 @@ export const useSipr = create<State>()(
           };
         });
         return {
-          ...current,
+          ...current, // méthodes du store
+          ...fresh, // valeurs par défaut propres (remet à zéro les tranches non persistées pour cette clé)
           ...p,
           visits,
           anomalies,
@@ -855,8 +860,8 @@ export const useSipr = create<State>()(
           pgpByWorkspace,
           users,
           sessionUserId: p.sessionUserId ?? null,
-          tickets: p.tickets ?? current.tickets ?? [],
-          deleted: mergeDeleted(current.deleted, (p as { deleted?: DeletedIds }).deleted),
+          tickets: p.tickets ?? fresh.tickets ?? [],
+          deleted: mergeDeleted(fresh.deleted, (p as { deleted?: DeletedIds }).deleted),
         };
       },
       storage: createJSONStorage(() =>
