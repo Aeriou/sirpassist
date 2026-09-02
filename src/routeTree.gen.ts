@@ -15,6 +15,7 @@ import { Route as ConflitsRouteImport } from './routes/conflits'
 import { Route as ConnexionRouteImport } from './routes/connexion'
 import { Route as FdsRouteImport } from './routes/fds'
 import { Route as PaaRouteImport } from './routes/paa'
+import { Route as PartagesRouteImport } from './routes/partages'
 import { Route as PgpRouteImport } from './routes/pgp'
 import { Route as RappelsRouteImport } from './routes/rappels'
 import { Route as RpsRouteImport } from './routes/rps'
@@ -62,6 +63,11 @@ const FdsRoute = FdsRouteImport.update({
 const PaaRoute = PaaRouteImport.update({
   id: '/paa',
   path: '/paa',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PartagesRoute = PartagesRouteImport.update({
+  id: '/partages',
+  path: '/partages',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PgpRoute = PgpRouteImport.update({
@@ -162,6 +168,7 @@ export interface FileRoutesByFullPath {
   '/connexion': typeof ConnexionRoute
   '/fds': typeof FdsRouteWithChildren
   '/paa': typeof PaaRoute
+  '/partages': typeof PartagesRoute
   '/pgp': typeof PgpRoute
   '/rappels': typeof RappelsRoute
   '/rps': typeof RpsRouteWithChildren
@@ -187,6 +194,7 @@ export interface FileRoutesByTo {
   '/conflits': typeof ConflitsRoute
   '/connexion': typeof ConnexionRoute
   '/paa': typeof PaaRoute
+  '/partages': typeof PartagesRoute
   '/pgp': typeof PgpRoute
   '/rappels': typeof RappelsRoute
   '/signalement': typeof SignalementRoute
@@ -212,6 +220,7 @@ export interface FileRoutesById {
   '/connexion': typeof ConnexionRoute
   '/fds': typeof FdsRouteWithChildren
   '/paa': typeof PaaRoute
+  '/partages': typeof PartagesRoute
   '/pgp': typeof PgpRoute
   '/rappels': typeof RappelsRoute
   '/rps': typeof RpsRouteWithChildren
@@ -240,6 +249,7 @@ export interface FileRouteTypes {
     | '/connexion'
     | '/fds'
     | '/paa'
+    | '/partages'
     | '/pgp'
     | '/rappels'
     | '/rps'
@@ -265,6 +275,7 @@ export interface FileRouteTypes {
     | '/conflits'
     | '/connexion'
     | '/paa'
+    | '/partages'
     | '/pgp'
     | '/rappels'
     | '/signalement'
@@ -289,6 +300,7 @@ export interface FileRouteTypes {
     | '/connexion'
     | '/fds'
     | '/paa'
+    | '/partages'
     | '/pgp'
     | '/rappels'
     | '/rps'
@@ -316,6 +328,7 @@ export interface RootRouteChildren {
   ConnexionRoute: typeof ConnexionRoute
   FdsRoute: typeof FdsRouteWithChildren
   PaaRoute: typeof PaaRoute
+  PartagesRoute: typeof PartagesRoute
   PgpRoute: typeof PgpRoute
   RappelsRoute: typeof RappelsRoute
   RpsRoute: typeof RpsRouteWithChildren
@@ -372,6 +385,13 @@ declare module '@tanstack/react-router' {
       path: '/paa'
       fullPath: '/paa'
       preLoaderRoute: typeof PaaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/partages': {
+      id: '/partages'
+      path: '/partages'
+      fullPath: '/partages'
+      preLoaderRoute: typeof PartagesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/pgp': {
@@ -547,6 +567,7 @@ const rootRouteChildren: RootRouteChildren = {
   ConnexionRoute: ConnexionRoute,
   FdsRoute: FdsRouteWithChildren,
   PaaRoute: PaaRoute,
+  PartagesRoute: PartagesRoute,
   PgpRoute: PgpRoute,
   RappelsRoute: RappelsRoute,
   RpsRoute: RpsRouteWithChildren,

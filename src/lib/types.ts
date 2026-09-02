@@ -128,6 +128,12 @@ export type Visit = {
   signatures?: VisitSignature[];
   workspaceId: string;
   demo?: boolean;
+  /** Partage ciblé : id d'origine stable, conservé d'un bout à l'autre. */
+  shareOriginId?: string;
+  /** Nom de la personne qui a partagé ce dossier avec moi. */
+  sharedFrom?: string;
+  /** Fil de partage (share_offer.thread_id) dont ce dossier est issu. */
+  sharedThreadId?: string;
 };
 
 export type Anomaly = {
@@ -154,6 +160,12 @@ export type Anomaly = {
   author?: RecordAuthor;
   workspaceId: string;
   demo?: boolean;
+  /** Partage ciblé : id d'origine stable, conservé d'un bout à l'autre. */
+  shareOriginId?: string;
+  /** Nom de la personne qui a partagé ce constat avec moi. */
+  sharedFrom?: string;
+  /** Fil de partage (share_offer.thread_id) dont ce constat est issu. */
+  sharedThreadId?: string;
 };
 
 export type FdsRealityTheme =

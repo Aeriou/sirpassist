@@ -6,6 +6,7 @@ import {
   ClipboardList,
   GitMerge,
   House,
+  Inbox,
   LayoutDashboard,
   LifeBuoy,
   LogOut,
@@ -21,6 +22,7 @@ import { Dialog, DialogContent } from "./ui/dialog";
 import { Field, Input } from "./ui/input";
 import { useOnline } from "@/lib/online";
 import { doSignOut } from "@/lib/auth/sign-out";
+import { apiShareInboxCount } from "@/lib/share-api";
 import { TwoFactorCard } from "./two-factor-card";
 import { toast } from "sonner";
 import { buildReminders } from "@/lib/reminders";
@@ -133,6 +135,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           <SideLink to="/conflits" active={pathname.startsWith("/conflits")} icon={GitMerge}>
             Conflits
           </SideLink>
+          {sessionUserId ? (
+            <SideLink to="/partages" active={pathname.startsWith("/partages")} icon={Inbox}>
+              Partages
+            </SideLink>
+          ) : null}
           <SideLink to="/support" active={pathname.startsWith("/support")} icon={LifeBuoy}>
             Support
           </SideLink>
@@ -159,6 +166,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="flex items-center gap-1">
           <IconLink to="/conflits" count={conflictCount} label="Conflits de données" icon={GitMerge} tone="warn" />
           <RemindersLink count={reminderCount} />
+          {sessionUserId ? <SharesLink /> : null}
           <Link
             to="/support"
             className="relative flex size-11 items-center justify-center rounded-full bg-surface-2 text-fg"
@@ -193,6 +201,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-2">
             <IconLink to="/conflits" count={conflictCount} label="Conflits de données" icon={GitMerge} tone="warn" />
             <RemindersLink count={reminderCount} />
+            {sessionUserId ? <SharesLink /> : null}
             <Link
               to="/support"
               className="relative flex size-11 items-center justify-center rounded-full bg-surface-2 text-fg"
@@ -269,6 +278,29 @@ function RemindersLink({ count }: { count: number }) {
   return <IconLink to="/rappels" count={count} label="Rappels d'actions" icon={Bell} />;
 }
 
+function SharesLink() {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    const tick = () => {
+      apiShareInboxCount()
+        .then((r) => {
+          if (alive && r.ok) setCount(r.count);
+        })
+        .catch(() => {
+          /* réseau : on retentera */
+        });
+    };
+    tick();
+    const t = window.setInterval(tick, 20_000);
+    return () => {
+      alive = false;
+      window.clearInterval(t);
+    };
+  }, []);
+  return <IconLink to="/partages" count={count} label="Partages reçus" icon={Inbox} tone="warn" />;
+}
+
 function IconLink({
   to,
   count,
@@ -276,7 +308,7 @@ function IconLink({
   icon: Icon,
   tone = "danger",
 }: {
-  to: "/rappels" | "/conflits";
+  to: "/rappels" | "/conflits" | "/partages";
   count: number;
   label: string;
   icon: typeof Bell;
@@ -318,6 +350,7 @@ function pageTitle(path: string, search?: Record<string, unknown>) {
   if (path.startsWith("/visite")) return "Visite";
   if (path.startsWith("/anomalie")) return "Constat";
   if (path.startsWith("/rappels")) return "Rappels";
+  if (path.startsWith("/partages")) return "Partages";
   if (path.startsWith("/compte")) return "Comptes";
   if (path.startsWith("/support/revue")) return "Revue éditeur";
   if (path.startsWith("/support")) return "Support";
@@ -337,7 +370,14 @@ function SideLink({
   children,
   pgpVue,
 }: {
-  to: (typeof NAV)[number]["to"] | "/tableau" | "/rappels" | "/conflits" | "/support" | "/rps";
+  to:
+    | (typeof NAV)[number]["to"]
+    | "/tableau"
+    | "/rappels"
+    | "/conflits"
+    | "/partages"
+    | "/support"
+    | "/rps";
   active: boolean;
   icon: typeof House;
   children: string;

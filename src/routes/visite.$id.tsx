@@ -7,6 +7,7 @@ import { ConfirmDelete } from "@/components/confirm-delete";
 import { FdsCard } from "@/components/fds-card";
 import { RpsCard } from "@/components/rps-card";
 import { PlaceEditor } from "@/components/place-editor";
+import { ShareButton } from "@/components/share-button";
 import { SignaturePad } from "@/components/signature-pad";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -194,6 +195,7 @@ function VisitDetail() {
               <Pencil />
               Modifier les infos
             </Button>
+            <ShareButton visitId={visit.id} />
             {visit.status === "en_cours" ? (
               <Button variant="outline" onClick={() => setSignOpen(true)}>
                 Signer et clôturer

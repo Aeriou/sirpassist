@@ -3,6 +3,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { ConfirmDelete } from "@/components/confirm-delete";
 import { KinneyCalculator } from "@/components/kinney-calculator";
+import { ShareButton } from "@/components/share-button";
 import { RiskBadge, StatusBadge, ThemeChip, UrgencyBadge } from "@/components/risk-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -173,6 +174,11 @@ function AnomalyPage() {
       <Button variant="secondary" asChild className="w-full">
         <Link to="/pgp">Voir dans le PGP</Link>
       </Button>
+      {visit ? (
+        <div className="[&>button]:w-full">
+          <ShareButton visitId={visit.id} anomalyId={anomaly.id} />
+        </div>
+      ) : null}
       <Button
         variant="outline"
         className="w-full text-danger"

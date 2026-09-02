@@ -20,6 +20,7 @@ import type {
   WorkspaceCloudSnapshot,
 } from "./types";
 import { emptyDeleted, mergeById, mergeDeleted, rememberIds } from "./cloud-sync";
+import type { SharePayloadV1 } from "./share-payload";
 import { uid } from "./utils";
 import { isoDate, isoDay } from "./format";
 import { planView, trialEndFrom } from "./plan";
@@ -95,6 +96,10 @@ type State = {
   activatePlan: (plan: "basic" | "pro", billing?: { stripeCustomerId?: string; stripeSubscriptionId?: string }) => void;
   patchSessionUser: (patch: Partial<SiprUser>) => void;
   applyCloudSnapshot: (snap: WorkspaceCloudSnapshot) => void;
+  importSharedPayload: (
+    payload: SharePayloadV1,
+    opts: { threadId: string },
+  ) => { visitId: string };
   ensureVisitByName: (name: string) => string;
   tickets: SupportTicket[];
   deleted: DeletedIds;
@@ -740,6 +745,54 @@ export const useSipr = create<State>()(
           deleted,
         });
         get().switchWorkspace(ws.id);
+      },
+      importSharedPayload: (payload, opts) => {
+        const st = get();
+        // Jamais dans l'espace démo : on cible l'espace personnel réel.
+        let wsId = st.activeWorkspaceId;
+        if (wsId === DEMO_WORKSPACE_ID) {
+          const owned = st.workspaces.filter((w) => w.id !== DEMO_WORKSPACE_ID);
+          wsId =
+            owned[0]?.id ??
+            get().createWorkspace({ kind: "independant", name: "Mon espace" }).id;
+        }
+        const now = isoDate();
+        const visitId = uid("visit");
+        const sv = payload.visit;
+        const from = payload.byName || payload.byEmail || "Partage";
+        const visit: Visit = {
+          id: visitId,
+          name: (sv.name || sv.company || "Dossier partagé").trim(),
+          company: sv.company,
+          site: sv.site,
+          interlocutor: sv.interlocutor,
+          date: sv.date,
+          status: sv.status,
+          coverPhoto: sv.coverPhoto,
+          notes: sv.notes,
+          geo: sv.geo,
+          place: sv.place,
+          workspaceId: wsId,
+          shareOriginId: sv.shareOriginId,
+          sharedFrom: from,
+          sharedThreadId: opts.threadId,
+        };
+        const anomalies: Anomaly[] = payload.anomalies.map((sa) => ({
+          ...sa,
+          id: uid("ano"),
+          visitId,
+          workspaceId: wsId,
+          createdAt: sa.createdAt || now,
+          status: sa.status ?? "ouverte",
+          sharedFrom: from,
+          sharedThreadId: opts.threadId,
+        }));
+        set({
+          visits: [visit, ...st.visits],
+          anomalies: [...anomalies, ...st.anomalies],
+        });
+        if (get().activeWorkspaceId !== wsId) get().switchWorkspace(wsId);
+        return { visitId };
       },
       ensureVisitByName: (raw) => {
         const name = raw.trim();
