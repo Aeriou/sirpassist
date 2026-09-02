@@ -30,7 +30,7 @@
  * a verified id via `@/lib/auth/middleware`.
  */
 import { betterAuth } from "better-auth";
-import { bearer, genericOAuth } from "better-auth/plugins";
+import { bearer, genericOAuth, twoFactor } from "better-auth/plugins";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { getCookie } from "@tanstack/react-start/server";
 import { randomBytes } from "node:crypto";
@@ -245,6 +245,11 @@ export const auth = betterAuth({
     // fires when an Authorization header is present, so the cookie path
     // (deployed apps) is unaffected.
     bearer(),
+
+    // 2FA (TOTP + codes de secours). Le secret est chiffré au repos par Better
+    // Auth, la vérification se fait côté serveur, avec verrouillage après trop
+    // d'échecs.
+    twoFactor({ issuer: "SiprAssist" }),
 
     // Bridges Better Auth's Set-Cookie into TanStack Start responses. MUST be
     // last so it runs after every other plugin's hooks.

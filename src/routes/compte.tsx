@@ -3,6 +3,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Building2, Copy, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { AuthPanel } from "@/components/auth-panel";
+import { TwoFactorCard } from "@/components/two-factor-card";
 import { doSignOut } from "@/lib/auth/sign-out";
 import { CloudCard } from "@/components/cloud-card";
 import { GroupSection } from "@/components/group-section";
@@ -176,6 +177,9 @@ function ComptePage() {
           </div>
         </Card>
       ) : null}
+
+      <TwoFactorCard />
+
       {!session ? (
         <div id="compte-gate" className="scroll-mt-20">
           <AuthPanel showSignOut={false} />

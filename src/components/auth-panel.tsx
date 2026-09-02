@@ -18,6 +18,8 @@ export function AuthPanel({ showSignOut = true }: { showSignOut?: boolean }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const [need2fa, setNeed2fa] = useState(false);
+  const [otp, setOtp] = useState("");
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -43,12 +45,41 @@ export function AuthPanel({ showSignOut = true }: { showSignOut?: boolean }) {
           toast.error(res.error.message ?? "E-mail ou mot de passe incorrect.");
           return;
         }
+        if ((res.data as { twoFactorRedirect?: boolean } | undefined)?.twoFactorRedirect) {
+          setNeed2fa(true);
+          toast.message("Entrez le code de votre application d'authentification.");
+          return;
+        }
         toast.success("Session ouverte.");
       }
       setPassword("");
       await refetch?.();
     } catch {
       toast.error("Connexion au serveur impossible.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitOtp(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      const clean = otp.trim();
+      const totp = await authClient.twoFactor.verifyTotp({ code: clean });
+      if (totp.error) {
+        // Autoriser un code de secours à la place.
+        const backup = await authClient.twoFactor.verifyBackupCode({ code: clean });
+        if (backup.error) {
+          toast.error("Code incorrect.");
+          return;
+        }
+      }
+      setOtp("");
+      setNeed2fa(false);
+      setPassword("");
+      toast.success("Session ouverte.");
+      await refetch?.();
     } finally {
       setBusy(false);
     }
@@ -76,6 +107,45 @@ export function AuthPanel({ showSignOut = true }: { showSignOut?: boolean }) {
             Se déconnecter
           </Button>
         ) : null}
+      </Card>
+    );
+  }
+
+  if (need2fa) {
+    return (
+      <Card className="space-y-3">
+        <div>
+          <h2 className="font-display font-semibold">Double authentification</h2>
+          <p className="text-sm text-muted">
+            Code à 6 chiffres de votre application, ou un code de secours.
+          </p>
+        </div>
+        <form className="space-y-3" onSubmit={(e) => void submitOtp(e)}>
+          <Field label="Code">
+            <Input
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={otp}
+              onChange={(e) => setOtp(e.target.value)}
+              required
+            />
+          </Field>
+          <Button type="submit" className="w-full" disabled={busy}>
+            {busy ? "…" : "Valider"}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            className="w-full"
+            onClick={() => {
+              setNeed2fa(false);
+              setOtp("");
+              setPassword("");
+            }}
+          >
+            Retour
+          </Button>
+        </form>
       </Card>
     );
   }
