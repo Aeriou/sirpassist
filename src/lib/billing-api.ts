@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { authMiddleware } from "@/lib/auth/middleware";
 import type { PaidTier } from "./plan";
 
 function originOf(raw: string) {
@@ -59,8 +60,9 @@ export const startCheckout = createServerFn({ method: "POST" })
   });
 
 export const confirmCheckout = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
   .validator((input: { sessionId: string; email: string }) => input)
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const sessionId = data.sessionId.trim();
     if (!sessionId.startsWith("cs_")) return { ok: false as const, error: "Session inconnue." };
     try {
@@ -84,6 +86,21 @@ export const confirmCheckout = createServerFn({ method: "POST" })
           ? sub.items.data[0]?.price?.nickname
           : undefined;
       const plan = tierFromStripe(nickname, session.metadata?.plan);
+
+      // Source de vérité serveur, immédiate (le webhook fait ensuite le suivi).
+      try {
+        const { getSql } = await import("@/lib/db");
+        const { writeServerPlan } = await import("@/lib/plan-server");
+        await writeServerPlan(await getSql(), {
+          userId: context.userId,
+          plan,
+          stripeCustomerId: customerId ?? null,
+          stripeSubscriptionId: subId,
+        });
+      } catch {
+        /* le webhook rattrapera */
+      }
+
       return {
         ok: true as const,
         plan,

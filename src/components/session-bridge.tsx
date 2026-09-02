@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { authClient } from "@/lib/auth/client";
+import { apiGetMyPlan } from "@/lib/plan-api";
 import { DEFAULT_PROFILE } from "@/lib/seed";
 import { useSipr } from "@/lib/store";
 import { DEMO_WORKSPACE_ID } from "@/lib/workspace";
@@ -43,26 +44,40 @@ export function SessionBridge() {
 
       if (target) {
         if (st.sessionUserId !== target.id) st.signInUser(target.id);
-        return;
+      } else {
+        // Premier passage pour ce compte : lui donner un espace personnel réel
+        // (l'espace démo cesse alors d'être l'espace actif).
+        const owned = st.workspaces.filter((w) => w.id !== DEMO_WORKSPACE_ID);
+        const wsId =
+          owned[0]?.id ?? st.createWorkspace({ kind: "independant", name: "Mon espace" }).id;
+        st.addUser({
+          id: localId,
+          name: baUser.name || email || "Conseiller",
+          email,
+          title: "Conseiller en prévention",
+          level: 3,
+          organisation: "",
+          kind: "independant",
+          workspaceId: wsId,
+          salt: "",
+          passwordHash: "",
+          createdAt: new Date().toISOString(),
+        });
       }
 
-      // Premier passage pour ce compte : lui donner un espace personnel réel
-      // (l'espace démo cesse alors d'être l'espace actif).
-      const owned = st.workspaces.filter((w) => w.id !== DEMO_WORKSPACE_ID);
-      const wsId = owned[0]?.id ?? st.createWorkspace({ kind: "independant", name: "Mon espace" }).id;
-      st.addUser({
-        id: localId,
-        name: baUser.name || email || "Conseiller",
-        email,
-        title: "Conseiller en prévention",
-        level: 3,
-        organisation: "",
-        kind: "independant",
-        workspaceId: wsId,
-        salt: "",
-        passwordHash: "",
-        createdAt: new Date().toISOString(),
-      });
+      // Forfait = source de vérité serveur (allowlist propriétaire + sipr_billing).
+      void apiGetMyPlan()
+        .then((p) => {
+          const s = useSipr.getState();
+          if (!s.sessionUserId) return;
+          s.patchSessionUser({
+            plan: p.plan === "expired" ? "trial" : p.plan,
+            trialEndsAt: p.trialEndsAt ?? undefined,
+          });
+        })
+        .catch(() => {
+          /* réessai au prochain rendu */
+        });
       return;
     }
 
