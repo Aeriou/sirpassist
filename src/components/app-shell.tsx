@@ -25,6 +25,7 @@ import { doSignOut } from "@/lib/auth/sign-out";
 import { apiShareInboxCount } from "@/lib/share-api";
 import { apiListPendingAccounts } from "@/lib/account-api";
 import { TwoFactorCard } from "./two-factor-card";
+import { DeleteAccountButton } from "./delete-account";
 import { toast } from "sonner";
 import { buildReminders } from "@/lib/reminders";
 import { selectWorkspace, useSipr, useWorkspaceAnomalies } from "@/lib/store";
@@ -538,6 +539,7 @@ function ProfileDialog({ onReset, onClose }: { onReset: () => void; onClose: () 
             >
               Se déconnecter
             </Button>
+            <DeleteAccountButton />
           </>
         ) : (
           <p className="text-xs text-muted">

@@ -78,6 +78,24 @@ export async function decideAccount(
   return { ok: true };
 }
 
+/**
+ * Purge des données applicatives d'un compte supprimé (hook `afterDelete`).
+ * Le `user` Better Auth (et session/account/twoFactor par cascade) est déjà
+ * parti à ce stade. Best-effort, dans l'ordre des dépendances.
+ */
+export async function purgeUserData(sql: Sql, userId: string): Promise<void> {
+  await sql`
+    delete from workspace_snapshot
+    where workspace_id in (select id from workspace where owner_user_id = ${userId})
+  `;
+  await sql`delete from workspace where owner_user_id = ${userId}`;
+  await sql`delete from workspace_member where user_id = ${userId}`;
+  await sql`delete from share_offer where from_user_id = ${userId} or to_user_id = ${userId}`;
+  await sql`delete from user_store where user_id = ${userId}`;
+  await sql`delete from sipr_billing where user_id = ${userId}`;
+  await sql`delete from account_approval where user_id = ${userId}`;
+}
+
 /** Créée à l'inscription (hook Better Auth). Idempotent. */
 export async function ensureApprovalRow(
   sql: Sql,

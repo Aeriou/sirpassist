@@ -242,6 +242,30 @@ export const auth = betterAuth({
       }
     : {}),
 
+  // Suppression de compte par l'utilisateur (droit à l'effacement / RGPD).
+  // Le compte propriétaire est protégé. Après suppression du `user` (cascade
+  // session/account/twoFactor), on purge les données applicatives liées.
+  user: {
+    deleteUser: {
+      enabled: true,
+      beforeDelete: async (user: { id: string; email?: string | null }) => {
+        const { isOwnerEmail } = await import("../plan-server");
+        if (isOwnerEmail(user.email)) {
+          throw new Error("Le compte propriétaire ne peut pas être supprimé.");
+        }
+      },
+      afterDelete: async (user: { id: string }) => {
+        try {
+          const { getSql } = await import("../db");
+          const { purgeUserData } = await import("../account-db");
+          await purgeUserData(await getSql(), user.id);
+        } catch {
+          /* best-effort : le compte est déjà supprimé */
+        }
+      },
+    },
+  },
+
   // Nouvel utilisateur ⇒ ligne de validation (`pending`), sauf e-mail
   // propriétaire ou `ACCOUNTS_AUTO_APPROVE=true`. N'échoue jamais l'inscription.
   databaseHooks: {

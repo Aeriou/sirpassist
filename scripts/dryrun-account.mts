@@ -43,7 +43,15 @@ pg.exec(`
 `);
 // Un compte "historique" présent avant la fonctionnalité.
 await pg.query(`insert into "user" (id, name, email, "emailVerified") values ('user_old', 'Old', 'old@example.com', true)`);
-pg.exec(readFileSync(join(root, "migrations/0008_account_approval.sql"), "utf8"));
+for (const m of [
+  "0003_workspace.sql",
+  "0005_billing.sql",
+  "0006_share.sql",
+  "0007_user_store.sql",
+  "0008_account_approval.sql",
+]) {
+  pg.exec(readFileSync(join(root, "migrations", m), "utf8"));
+}
 const sql = makeSql(pg);
 
 check("backfill : le compte historique est 'approved'", (await adb.myApprovalStatus(sql, "user_old")) === "approved");
@@ -83,6 +91,38 @@ check("autoApprove -> directement approved", (await adb.myApprovalStatus(sql, "u
 const recent = await adb.listRecentDecisions(sql);
 check("listRecentDecisions exclut le backfill", recent.every((r) => r.user_id !== "user_old"));
 check("listRecentDecisions inclut user_new", recent.some((r) => r.user_id === "user_new"));
+
+// -- purge d'un compte supprimé --
+const D = "user_del";
+await sql`insert into "user" (id, name, email, "emailVerified") values (${D}, 'Del', 'del@example.com', true)`;
+await sql`insert into workspace (id, name, kind, join_code, owner_user_id) values ('ws_del', 'G', 'entreprise', 'ZZZ111', ${D})`;
+await sql`insert into workspace_snapshot (workspace_id, data) values ('ws_del', '{}'::jsonb)`;
+await sql`insert into workspace_member (workspace_id, user_id, role, status) values ('ws_del', ${D}, 'owner', 'active')`;
+// Un groupe appartenant à quelqu'un d'autre, dont le compte supprimé est membre.
+await sql`insert into workspace (id, name, kind, join_code, owner_user_id) values ('ws_keep', 'K', 'entreprise', 'ZZZ222', 'user_other')`;
+await sql`insert into workspace_member (workspace_id, user_id, role, status) values ('ws_keep', 'user_other', 'owner', 'active')`;
+await sql`insert into workspace_member (workspace_id, user_id, role, status) values ('ws_keep', ${D}, 'member', 'active')`;
+await sql`insert into share_offer (id, thread_id, from_user_id, to_user_id, kind, payload) values ('shr_del', 'thr', ${D}, 'user_other', 'visit', '{}'::jsonb)`;
+await sql`insert into user_store (user_id, data, rev) values (${D}, '{}'::jsonb, 3)`;
+await sql`insert into sipr_billing (user_id, plan) values (${D}, 'trial')`;
+await adb.ensureApprovalRow(sql, { userId: D, email: "del@example.com", name: "Del", autoApprove: true });
+
+await adb.purgeUserData(sql, D);
+
+const gone = async (q: Promise<unknown[]>) => (await q).length === 0;
+check("purge : workspace supprimé", await gone(sql`select 1 from workspace where owner_user_id = ${D}`));
+check("purge : workspace_snapshot supprimé", await gone(sql`select 1 from workspace_snapshot where workspace_id = 'ws_del'`));
+check("purge : ses appartenances supprimées", await gone(sql`select 1 from workspace_member where user_id = ${D}`));
+check("purge : partages (émis ou reçus) supprimés", await gone(sql`select 1 from share_offer where from_user_id = ${D} or to_user_id = ${D}`));
+check("purge : user_store supprimé", await gone(sql`select 1 from user_store where user_id = ${D}`));
+check("purge : sipr_billing supprimé", await gone(sql`select 1 from sipr_billing where user_id = ${D}`));
+check("purge : account_approval supprimé", await gone(sql`select 1 from account_approval where user_id = ${D}`));
+check(
+  "purge : un groupe d'autrui survit, seule l'appartenance du compte part",
+  (await sql`select 1 from workspace where id = 'ws_keep'`).length === 1 &&
+    (await sql`select 1 from workspace_member where workspace_id = 'ws_keep' and user_id = 'user_other'`).length === 1 &&
+    (await sql`select 1 from workspace_member where workspace_id = 'ws_keep' and user_id = ${D}`).length === 0,
+);
 
 console.log("");
 if (failures > 0) {
