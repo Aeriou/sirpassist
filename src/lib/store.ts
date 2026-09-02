@@ -98,7 +98,7 @@ type State = {
   applyCloudSnapshot: (snap: WorkspaceCloudSnapshot) => void;
   importSharedPayload: (
     payload: SharePayloadV1,
-    opts: { threadId: string },
+    opts: { threadId: string; isReturn?: boolean },
   ) => { visitId: string };
   ensureVisitByName: (name: string) => string;
   tickets: SupportTicket[];
@@ -760,9 +760,16 @@ export const useSipr = create<State>()(
         const visitId = uid("visit");
         const sv = payload.visit;
         const from = payload.byName || payload.byEmail || "Partage";
+        // Étiquette pour distinguer une copie partagée d'un dossier à soi (et un
+        // retour d'un premier envoi). On retire d'abord une étiquette existante
+        // pour ne pas les empiler au fil des allers-retours.
+        const SHARE_TAG_RE = /\s+—\s+(?:partagé par|retour de)\s+.+$/u;
+        const suffix = opts.isReturn ? ` — retour de ${from}` : ` — partagé par ${from}`;
+        const label = (raw: string, fallback: string) =>
+          `${(raw || fallback).replace(SHARE_TAG_RE, "").trim()}${suffix}`;
         const visit: Visit = {
           id: visitId,
-          name: (sv.name || sv.company || "Dossier partagé").trim(),
+          name: label(sv.name, sv.company || "Dossier partagé"),
           company: sv.company,
           site: sv.site,
           interlocutor: sv.interlocutor,
@@ -782,6 +789,11 @@ export const useSipr = create<State>()(
           id: uid("ano"),
           visitId,
           workspaceId: wsId,
+          // Constat partagé seul : on étiquette aussi son titre (c'est lui qui
+          // apparaît dans les listes). Dans un dossier complet, le titre reste
+          // net — l'étiquette est déjà portée par le nom du dossier.
+          title:
+            payload.kind === "anomaly" ? label(sa.title, "Constat") : sa.title,
           createdAt: sa.createdAt || now,
           status: sa.status ?? "ouverte",
           sharedFrom: from,

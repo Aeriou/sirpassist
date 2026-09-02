@@ -76,7 +76,10 @@ function PartagesPage() {
         return;
       }
       if (accept && res.payload && isSharePayloadV1(res.payload)) {
-        const { visitId } = importSharedPayload(res.payload, { threadId: offer.thread_id });
+        const { visitId } = importSharedPayload(res.payload, {
+          threadId: offer.thread_id,
+          isReturn: Boolean(offer.reply_to),
+        });
         toast.success(`« ${offer.title} » importé dans vos dossiers.`);
         void refresh();
         navigate({ to: "/visite/$id", params: { id: visitId } });
