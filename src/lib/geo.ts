@@ -38,6 +38,8 @@ const NOMINATIM_HEADERS = {
   "Accept-Language": "fr",
 };
 
+const FETCH_TIMEOUT_MS = 7000;
+
 function hitToPlace(hit: NominatimHit, source: Place["source"]): Place | null {
   const a = hit.address ?? {};
   const cc = (a.country_code ?? "").toLowerCase();
@@ -69,23 +71,105 @@ function hitToPlace(hit: NominatimHit, source: Place["source"]): Place | null {
   };
 }
 
+// Photon (komoot) — géocodeur OSM de secours. Nominatim refuse ou limite
+// souvent les appels émis depuis un hébergeur (Vercel) ; Photon prend le relais.
+type PhotonFeature = {
+  geometry?: { coordinates?: number[] };
+  properties?: Record<string, string | undefined>;
+};
+
+function photonToPlace(f: PhotonFeature, source: Place["source"]): Place | null {
+  const p = f.properties ?? {};
+  const cc = (p.countrycode ?? "").toLowerCase();
+  if (cc && cc !== "be") return null;
+  const coords = f.geometry?.coordinates ?? [];
+  const lng = Number(coords[0]);
+  const lat = Number(coords[1]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || !inBelgium(lat, lng)) return null;
+  const postcode = (p.postcode ?? "").replace(/\s/g, "").slice(0, 4);
+  if (postcode && !isBelgianPostcode(postcode)) return null;
+  const street = p.street || p.name || "";
+  const number = p.housenumber ?? "";
+  const city = p.city || p.town || p.village || p.county || "";
+  if (!street && !city) return null;
+  const label = [ [street, number].filter(Boolean).join(" "), [postcode, city].filter(Boolean).join(" "), "Belgique"]
+    .filter(Boolean)
+    .join(", ");
+  return {
+    ...emptyPlace(),
+    street,
+    number,
+    postcode,
+    city,
+    country: "Belgique",
+    lat,
+    lng,
+    label,
+    verified: Boolean(street && city && postcode),
+    source,
+  };
+}
+
+async function photonSearch(q: string): Promise<Place[]> {
+  const url = `https://photon.komoot.io/api/?lang=fr&limit=6&lat=50.64&lon=4.67&q=${encodeURIComponent(q)}`;
+  const res = await fetch(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+  if (!res.ok) throw new Error(`photon ${res.status}`);
+  const body = (await res.json()) as { features?: PhotonFeature[] };
+  return (body.features ?? [])
+    .map((f) => photonToPlace(f, "search"))
+    .filter((p): p is Place => Boolean(p));
+}
+
+async function photonReverse(lat: number, lng: number): Promise<Place | null> {
+  const url = `https://photon.komoot.io/reverse?lang=fr&lat=${lat}&lon=${lng}`;
+  const res = await fetch(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+  if (!res.ok) throw new Error(`photon ${res.status}`);
+  const body = (await res.json()) as { features?: PhotonFeature[] };
+  const first = (body.features ?? [])[0];
+  return first ? photonToPlace(first, "map") : null;
+}
+
+function dedupePlaces(hits: Place[]): Place[] {
+  const seen = new Set<string>();
+  return hits.filter((h) => {
+    if (seen.has(h.label)) return false;
+    seen.add(h.label);
+    return true;
+  });
+}
+
 export const reverseGeocode = createServerFn({ method: "POST" })
   .validator((input: { lat: number; lng: number }) => input)
   .handler(async ({ data }): Promise<{ ok: true; place: Place } | { ok: false; error: string }> => {
     if (!inBelgium(data.lat, data.lng)) {
       return { ok: false, error: "Point hors Belgique." };
     }
+    let unreachable = 0;
+
     try {
       const url = `https://nominatim.openstreetmap.org/reverse?lat=${data.lat}&lon=${data.lng}&format=jsonv2&zoom=18&addressdetails=1&accept-language=fr`;
-      const res = await fetch(url, { headers: NOMINATIM_HEADERS });
-      if (!res.ok) return { ok: false, error: "Vérification d'adresse indisponible." };
-      const body = (await res.json()) as NominatimHit;
-      const place = hitToPlace(body, "map");
-      if (!place) return { ok: false, error: "Pas d'adresse civique belge à cet endroit." };
-      return { ok: true, place };
+      const res = await fetch(url, { headers: NOMINATIM_HEADERS, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+      if (res.ok) {
+        const place = hitToPlace((await res.json()) as NominatimHit, "map");
+        if (place) return { ok: true, place };
+      } else {
+        unreachable++;
+      }
     } catch {
+      unreachable++;
+    }
+
+    try {
+      const place = await photonReverse(data.lat, data.lng);
+      if (place) return { ok: true, place };
+    } catch {
+      unreachable++;
+    }
+
+    if (unreachable >= 2) {
       return { ok: false, error: "Vérification d'adresse indisponible (réseau)." };
     }
+    return { ok: false, error: "Pas d'adresse civique belge à cet endroit." };
   });
 
 export const searchBelgianAddress = createServerFn({ method: "POST" })
@@ -95,23 +179,38 @@ export const searchBelgianAddress = createServerFn({ method: "POST" })
     if (q.length < 5) return { ok: true, hits: [] };
     const fakePc = q.match(/\b(\d{5,})\b/);
     if (fakePc) return { ok: true, hits: [] };
+
+    let hits: Place[] = [];
+    let unreachable = 0;
+
     try {
       const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=6&countrycodes=be&accept-language=fr&q=${encodeURIComponent(q)}`;
-      const res = await fetch(url, { headers: NOMINATIM_HEADERS });
-      if (!res.ok) return { ok: false, error: "Recherche d'adresse indisponible." };
-      const body = (await res.json()) as NominatimHit[];
-      const hits = body.map((h) => hitToPlace(h, "search")).filter((p): p is Place => Boolean(p));
-      const seen = new Set<string>();
-      const unique = hits.filter((h) => {
-        const k = h.label;
-        if (seen.has(k)) return false;
-        seen.add(k);
-        return true;
-      });
-      return { ok: true, hits: unique };
+      const res = await fetch(url, { headers: NOMINATIM_HEADERS, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+      if (res.ok) {
+        const body = (await res.json()) as NominatimHit[];
+        hits = body.map((h) => hitToPlace(h, "search")).filter((p): p is Place => Boolean(p));
+      } else {
+        unreachable++;
+      }
     } catch {
-      return { ok: false, error: "Recherche d'adresse indisponible (réseau)." };
+      unreachable++;
     }
+
+    if (hits.length === 0) {
+      try {
+        hits = await photonSearch(q);
+      } catch {
+        unreachable++;
+      }
+    }
+
+    if (hits.length === 0 && unreachable >= 2) {
+      return {
+        ok: false,
+        error: "Recherche d'adresse momentanément indisponible. Réessayez ou posez le point sur la carte.",
+      };
+    }
+    return { ok: true, hits: dedupePlaces(hits) };
   });
 
 export async function locateGps(): Promise<GeoFix> {

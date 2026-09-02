@@ -14,16 +14,36 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/conflits")({ component: ConflitsPage });
 
 function ConflitsPage() {
-  const conflicts = useSipr((s) => s.conflicts);
+  const allConflicts = useSipr((s) => s.conflicts);
   const resolve = useSipr((s) => s.resolveConflict);
   const reopen = useSipr((s) => s.reopenConflicts);
   const profile = useSipr((s) => s.profile);
   const activeWorkspaceId = useSipr((s) => s.activeWorkspaceId);
   const demoSpace = activeWorkspaceId === DEMO_WORKSPACE_ID;
-  const open = demoSpace ? conflicts.filter((c) => c.status === "ouvert") : [];
-  const done = demoSpace ? conflicts.filter((c) => c.status === "resolu") : [];
+  // Les conflits sont des données de démonstration : hors espace démo, il n'y
+  // en a pas (aucun mécanisme réel ne les génère encore).
+  const conflicts = demoSpace ? allConflicts : [];
+  const open = conflicts.filter((c) => c.status === "ouvert");
+  const done = conflicts.filter((c) => c.status === "resolu");
   const [activeId, setActiveId] = useState(open[0]?.id ?? conflicts[0]?.id);
   const active = conflicts.find((c) => c.id === activeId) ?? open[0];
+
+  if (!demoSpace) {
+    return (
+      <div className="space-y-6">
+        <header>
+          <h1 className="font-display text-2xl font-semibold md:hidden">Conflits</h1>
+          <p className="text-sm text-muted">
+            Écarts entre une saisie terrain et un suivi bureau sur le même constat. Les preuves
+            (photo, GPS, horodatage) ne sont jamais écrasées.
+          </p>
+        </header>
+        <p className="rounded-xl bg-ok/15 px-4 py-3 text-sm text-ok">
+          Aucun conflit. Le dossier SIPP est aligné.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
