@@ -21,6 +21,7 @@ import { Dialog, DialogContent } from "./ui/dialog";
 import { Field, Input } from "./ui/input";
 import { useOnline } from "@/lib/online";
 import { doSignOut } from "@/lib/auth/sign-out";
+import { TwoFactorCard } from "./two-factor-card";
 import { toast } from "sonner";
 import { buildReminders } from "@/lib/reminders";
 import { selectWorkspace, useSipr, useWorkspaceAnomalies } from "@/lib/store";
@@ -441,6 +442,8 @@ function ProfileDialog({ onReset, onClose }: { onReset: () => void; onClose: () 
           </fieldset>
           <p className="text-xs text-muted">Enregistré automatiquement.</p>
         </div>
+
+        <TwoFactorCard />
 
         {session ? (
           <>
