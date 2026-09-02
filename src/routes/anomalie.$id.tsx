@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { ConfirmDelete } from "@/components/confirm-delete";
 import { KinneyCalculator } from "@/components/kinney-calculator";
 import { ShareButton } from "@/components/share-button";
+import { ShareNotes } from "@/components/share-notes";
 import { RiskBadge, StatusBadge, ThemeChip, UrgencyBadge } from "@/components/risk-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -170,6 +171,8 @@ function AnomalyPage() {
           <p className="text-xs text-muted">Échéance : {formatShortDate(anomaly.dueDate)}</p>
         ) : null}
       </section>
+
+      <ShareNotes scope="anomaly" id={anomaly.id} />
 
       <Button variant="secondary" asChild className="w-full">
         <Link to="/pgp">Voir dans le PGP</Link>

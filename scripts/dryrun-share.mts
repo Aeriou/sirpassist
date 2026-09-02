@@ -13,6 +13,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import * as sdb from "../src/lib/share-db.ts";
+import { computeSharedPlan, mergeShareNotes } from "../src/lib/share-merge.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -173,6 +174,110 @@ const bobReturns = await sdb.sendOffer(sql, {
 });
 check("Bob renvoie sur le même fil", bobReturns.ok === true && bobReturns.ok && bobReturns.threadId === threadId);
 check("Alice reçoit le retour", (await sdb.countIncoming(sql, ALICE)) === 1);
+
+// ---------------------------------------------------------------------------
+// Planificateur de rapprochement (pur) — computeSharedPlan / mergeShareNotes
+// ---------------------------------------------------------------------------
+
+const mkAnomaly = (o: Record<string, unknown>) => ({
+  title: "",
+  location: "",
+  description: "",
+  theme: "t",
+  urgency: "moyenne",
+  correctiveAction: "",
+  kinney: { score: 10 },
+  voice: { danger: "", measure: "", zone: "" },
+  ...o,
+});
+
+// -- 1. import neuf : aucun dossier local pour ce fil --
+const planFresh = computeSharedPlan(
+  { visits: [], anomalies: [] } as any,
+  {
+    v: 1,
+    kind: "visit",
+    sharedAt: "",
+    byName: "Alice",
+    byEmail: "a@x",
+    visit: { name: "D", company: "D", shareOriginId: "ov" } as any,
+    anomalies: [mkAnomaly({ shareOriginId: "oa1", title: "A1" }), mkAnomaly({ shareOriginId: "oa2", title: "A2" })] as any,
+  },
+  "thr_1",
+);
+check("import neuf -> isMerge false", planFresh.isMerge === false);
+check("import neuf -> tous les constats en 'new'/'add'", planFresh.incoming.every((r) => r.state === "new" && r.choice === "add"));
+check("import neuf -> aucune suppression", planFresh.removals.length === 0);
+
+// -- 2. fusion (retour) : 1 inchangé, 1 modifié, 1 nouveau, 1 retiré --
+const localVisit = {
+  id: "v1",
+  name: "Atelier 3",
+  company: "Atelier 3",
+  interlocutor: "Chef",
+  date: "2026-09-01",
+  site: "",
+  notes: "",
+  sharedThreadId: "thr_2",
+  shareOriginId: "ov2",
+  shareNotes: [{ id: "n1", author: "Bob", at: "2026-09-01T10:00:00Z", text: "déjà là" }],
+};
+const localAnoms = [
+  mkAnomaly({ id: "a1", visitId: "v1", shareOriginId: "oa_same", title: "Sol glissant", description: "idem" }),
+  mkAnomaly({ id: "a2", visitId: "v1", shareOriginId: "oa_chg", title: "Câble", description: "ancienne" }),
+  mkAnomaly({ id: "a3", visitId: "v1", shareOriginId: "oa_gone", title: "Retiré ensuite" }),
+];
+const planMerge = computeSharedPlan(
+  { visits: [localVisit], anomalies: localAnoms } as any,
+  {
+    v: 1,
+    kind: "visit",
+    sharedAt: "",
+    byName: "Alice",
+    byEmail: "a@x",
+    visit: {
+      name: "Atelier 3",
+      company: "Atelier 3 SPRL", // changé
+      interlocutor: "Chef",
+      date: "2026-09-01",
+      site: "",
+      notes: "",
+      shareOriginId: "ov2",
+      shareNotes: [
+        { id: "n1", author: "Bob", at: "2026-09-01T10:00:00Z", text: "déjà là" },
+        { id: "n2", author: "Alice", at: "2026-09-02T09:00:00Z", text: "revu le point câble" },
+      ],
+    } as any,
+    anomalies: [
+      mkAnomaly({ shareOriginId: "oa_same", title: "Sol glissant", description: "idem" }),
+      mkAnomaly({ shareOriginId: "oa_chg", title: "Câble dénudé", description: "précisée" }),
+      mkAnomaly({ shareOriginId: "oa_new", title: "Extincteur manquant" }),
+    ] as any,
+  },
+  "thr_2",
+);
+check("fusion -> isMerge true, cible v1", planMerge.isMerge === true && planMerge.targetVisitId === "v1");
+check("fusion -> infos dossier détectées modifiées", planMerge.visitChanged === true);
+const same = planMerge.incoming.find((r) => r.shareOriginId === "oa_same");
+const chg = planMerge.incoming.find((r) => r.shareOriginId === "oa_chg");
+const neuf = planMerge.incoming.find((r) => r.shareOriginId === "oa_new");
+check("fusion -> constat inchangé => same/skip", same?.state === "same" && same?.choice === "skip");
+check("fusion -> constat modifié => changed/take + localId", chg?.state === "changed" && chg?.choice === "take" && chg?.localId === "a2");
+check("fusion -> constat nouveau => new/add", neuf?.state === "new" && neuf?.choice === "add");
+check("fusion -> constat absent de l'entrant => suppression proposée (garder par défaut)",
+  planMerge.removals.length === 1 && planMerge.removals[0]!.localId === "a3" && planMerge.removals[0]!.choice === "keep");
+check("fusion -> 1 note de partage entrante nouvelle", planMerge.incomingNoteCount === 1);
+
+// -- 3. mergeShareNotes : dédoublonne par id, trie par date --
+const merged = mergeShareNotes(
+  [{ id: "n1", author: "Bob", at: "2026-09-02T00:00:00Z", text: "b" }],
+  [
+    { id: "n1", author: "Bob", at: "2026-09-02T00:00:00Z", text: "b" },
+    { id: "n0", author: "Al", at: "2026-09-01T00:00:00Z", text: "a" },
+  ],
+);
+check("mergeShareNotes -> 2 notes, dédoublonnées", merged.length === 2);
+check("mergeShareNotes -> triées par date", merged[0]!.id === "n0" && merged[1]!.id === "n1");
 
 console.log("");
 if (failures > 0) {

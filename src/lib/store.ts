@@ -13,6 +13,7 @@ import type {
   Profile,
   RecordAuthor,
   RpsSituation,
+  ShareNote,
   SiprUser,
   SupportTicket,
   Visit,
@@ -21,6 +22,7 @@ import type {
 } from "./types";
 import { emptyDeleted, mergeById, mergeDeleted, rememberIds } from "./cloud-sync";
 import type { SharePayloadV1 } from "./share-payload";
+import { mergeShareNotes, type SharedImportPlan } from "./share-merge";
 import { uid } from "./utils";
 import { isoDate, isoDay } from "./format";
 import { planView, trialEndFrom } from "./plan";
@@ -98,8 +100,9 @@ type State = {
   applyCloudSnapshot: (snap: WorkspaceCloudSnapshot) => void;
   importSharedPayload: (
     payload: SharePayloadV1,
-    opts: { threadId: string; isReturn?: boolean },
+    opts: { threadId: string; isReturn?: boolean; plan?: SharedImportPlan },
   ) => { visitId: string };
+  addShareNote: (scope: "visit" | "anomaly", id: string, text: string) => void;
   ensureVisitByName: (name: string) => string;
   tickets: SupportTicket[];
   deleted: DeletedIds;
@@ -748,7 +751,109 @@ export const useSipr = create<State>()(
       },
       importSharedPayload: (payload, opts) => {
         const st = get();
-        // Jamais dans l'espace démo : on cible l'espace personnel réel.
+        const now = isoDate();
+        const sv = payload.visit;
+        const from = payload.byName || payload.byEmail || "Partage";
+        const plan = opts.plan;
+
+        // Champs "de fond" d'un constat, repris quand on prend la version reçue.
+        const takeAnomalyFields = (sa: (typeof payload.anomalies)[number]) => ({
+          title: sa.title,
+          location: sa.location,
+          description: sa.description,
+          theme: sa.theme,
+          urgency: sa.urgency,
+          kinney: sa.kinney,
+          kinneyWhy: sa.kinneyWhy,
+          voice: sa.voice,
+          correctiveAction: sa.correctiveAction,
+          legalRef: sa.legalRef,
+          dueDate: sa.dueDate,
+        });
+
+        // ---------- Fusion dans un dossier déjà présent (aller-retour) ----------
+        const target =
+          plan?.isMerge && plan.targetVisitId
+            ? st.visits.find((v) => v.id === plan.targetVisitId)
+            : undefined;
+
+        if (plan?.isMerge && target) {
+          const targetId = target.id;
+          const wsId = target.workspaceId;
+          const incomingByOrigin = new Map(
+            payload.anomalies.map((a) => [a.shareOriginId, a]),
+          );
+
+          const visits = st.visits.map((v) => {
+            if (v.id !== targetId) return v;
+            const base =
+              plan.updateVisitInfo && plan.visitChanged
+                ? {
+                    ...v,
+                    company: sv.company,
+                    interlocutor: sv.interlocutor,
+                    date: sv.date,
+                    site: sv.site,
+                    notes: sv.notes,
+                    geo: sv.geo ?? v.geo,
+                    place: sv.place ?? v.place,
+                  }
+                : v;
+            return {
+              ...base,
+              sharedFrom: v.sharedFrom ?? from,
+              sharedThreadId: v.sharedThreadId ?? opts.threadId,
+              shareNotes: mergeShareNotes(v.shareNotes, sv.shareNotes),
+            };
+          });
+
+          let anomalies = [...st.anomalies];
+          for (const row of plan.incoming) {
+            const sa = incomingByOrigin.get(row.shareOriginId);
+            if (!sa) continue;
+            if (row.choice === "add") {
+              anomalies = [
+                {
+                  ...sa,
+                  id: uid("ano"),
+                  visitId: targetId,
+                  workspaceId: wsId,
+                  createdAt: sa.createdAt || now,
+                  status: sa.status ?? "ouverte",
+                  sharedFrom: from,
+                  sharedThreadId: opts.threadId,
+                  shareNotes: mergeShareNotes(undefined, sa.shareNotes),
+                },
+                ...anomalies,
+              ];
+            } else if (row.localId) {
+              anomalies = anomalies.map((a) => {
+                if (a.id !== row.localId) return a;
+                const shareNotes = mergeShareNotes(a.shareNotes, sa.shareNotes);
+                return row.choice === "take"
+                  ? {
+                      ...a,
+                      ...takeAnomalyFields(sa),
+                      photo: sa.photo ?? a.photo,
+                      transcription: sa.transcription ?? a.transcription,
+                      geo: sa.geo ?? a.geo,
+                      shareNotes,
+                    }
+                  : { ...a, shareNotes }; // keep / skip : version locale gardée
+              });
+            }
+          }
+          const toDelete = new Set(
+            plan.removals.filter((r) => r.choice === "delete").map((r) => r.localId),
+          );
+          if (toDelete.size) anomalies = anomalies.filter((a) => !toDelete.has(a.id));
+
+          set({ visits, anomalies });
+          if (get().activeWorkspaceId !== wsId) get().switchWorkspace(wsId);
+          return { visitId: targetId };
+        }
+
+        // ---------- Import neuf ----------
         let wsId = st.activeWorkspaceId;
         if (wsId === DEMO_WORKSPACE_ID) {
           const owned = st.workspaces.filter((w) => w.id !== DEMO_WORKSPACE_ID);
@@ -756,10 +861,7 @@ export const useSipr = create<State>()(
             owned[0]?.id ??
             get().createWorkspace({ kind: "independant", name: "Mon espace" }).id;
         }
-        const now = isoDate();
         const visitId = uid("visit");
-        const sv = payload.visit;
-        const from = payload.byName || payload.byEmail || "Partage";
         // Étiquette pour distinguer une copie partagée d'un dossier à soi (et un
         // retour d'un premier envoi). On retire d'abord une étiquette existante
         // pour ne pas les empiler au fil des allers-retours.
@@ -783,28 +885,60 @@ export const useSipr = create<State>()(
           shareOriginId: sv.shareOriginId,
           sharedFrom: from,
           sharedThreadId: opts.threadId,
+          shareNotes: mergeShareNotes(undefined, sv.shareNotes),
         };
-        const anomalies: Anomaly[] = payload.anomalies.map((sa) => ({
-          ...sa,
-          id: uid("ano"),
-          visitId,
-          workspaceId: wsId,
-          // Constat partagé seul : on étiquette aussi son titre (c'est lui qui
-          // apparaît dans les listes). Dans un dossier complet, le titre reste
-          // net — l'étiquette est déjà portée par le nom du dossier.
-          title:
-            payload.kind === "anomaly" ? label(sa.title, "Constat") : sa.title,
-          createdAt: sa.createdAt || now,
-          status: sa.status ?? "ouverte",
-          sharedFrom: from,
-          sharedThreadId: opts.threadId,
-        }));
+        const skip = new Set(
+          (plan?.incoming ?? [])
+            .filter((r) => r.choice === "skip")
+            .map((r) => r.shareOriginId),
+        );
+        const anomalies: Anomaly[] = payload.anomalies
+          .filter((sa) => !skip.has(sa.shareOriginId))
+          .map((sa) => ({
+            ...sa,
+            id: uid("ano"),
+            visitId,
+            workspaceId: wsId,
+            // Constat partagé seul : on étiquette aussi son titre (c'est lui qui
+            // apparaît dans les listes). Dans un dossier complet, le titre reste
+            // net — l'étiquette est déjà portée par le nom du dossier.
+            title:
+              payload.kind === "anomaly" ? label(sa.title, "Constat") : sa.title,
+            createdAt: sa.createdAt || now,
+            status: sa.status ?? "ouverte",
+            sharedFrom: from,
+            sharedThreadId: opts.threadId,
+            shareNotes: mergeShareNotes(undefined, sa.shareNotes),
+          }));
         set({
           visits: [visit, ...st.visits],
           anomalies: [...anomalies, ...st.anomalies],
         });
         if (get().activeWorkspaceId !== wsId) get().switchWorkspace(wsId);
         return { visitId };
+      },
+      addShareNote: (scope, id, text) => {
+        const t = text.trim();
+        if (!t) return;
+        const note: ShareNote = {
+          id: uid("note"),
+          author: currentAuthor(get()).name || "Conseiller",
+          at: isoDate(),
+          text: t,
+        };
+        if (scope === "visit") {
+          set({
+            visits: get().visits.map((v) =>
+              v.id === id ? { ...v, shareNotes: [...(v.shareNotes ?? []), note] } : v,
+            ),
+          });
+        } else {
+          set({
+            anomalies: get().anomalies.map((a) =>
+              a.id === id ? { ...a, shareNotes: [...(a.shareNotes ?? []), note] } : a,
+            ),
+          });
+        }
       },
       ensureVisitByName: (raw) => {
         const name = raw.trim();

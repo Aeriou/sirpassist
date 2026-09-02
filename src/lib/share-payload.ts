@@ -44,20 +44,41 @@ export function isSharePayloadV1(x: unknown): x is SharePayloadV1 {
 }
 
 function stripVisit(v: Visit, shareOriginId: string): SharedVisit {
-  const { id: _id, workspaceId: _ws, demo: _demo, signatures: _sig, ...rest } = v;
+  const {
+    id: _id,
+    workspaceId: _ws,
+    demo: _demo,
+    signatures: _sig,
+    sharedFrom: _sf,
+    sharedThreadId: _st,
+    ...rest
+  } = v;
   void _id;
   void _ws;
   void _demo;
   void _sig;
+  void _sf;
+  void _st;
+  // `shareNotes` passe via `...rest` (signé, fusionné à l'import).
   return { ...rest, shareOriginId };
 }
 
 function stripAnomaly(a: Anomaly, shareOriginId: string): SharedAnomaly {
-  const { id: _id, visitId: _vid, workspaceId: _ws, demo: _demo, ...rest } = a;
+  const {
+    id: _id,
+    visitId: _vid,
+    workspaceId: _ws,
+    demo: _demo,
+    sharedFrom: _sf,
+    sharedThreadId: _st,
+    ...rest
+  } = a;
   void _id;
   void _vid;
   void _ws;
   void _demo;
+  void _sf;
+  void _st;
   return { ...rest, shareOriginId };
 }
 

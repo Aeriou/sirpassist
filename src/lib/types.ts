@@ -24,6 +24,14 @@ export type RecordAuthor = {
   level: AdvisorLevel;
 };
 
+/** Note de partage : commentaire signé, ajouté au fil des allers-retours. */
+export type ShareNote = {
+  id: string;
+  author: string;
+  at: string;
+  text: string;
+};
+
 export type Workspace = {
   id: string;
   kind: AccountKind;
@@ -134,6 +142,8 @@ export type Visit = {
   sharedFrom?: string;
   /** Fil de partage (share_offer.thread_id) dont ce dossier est issu. */
   sharedThreadId?: string;
+  /** Notes de partage signées (les deux parties écrivent, rien n'est écrasé). */
+  shareNotes?: ShareNote[];
 };
 
 export type Anomaly = {
@@ -166,6 +176,8 @@ export type Anomaly = {
   sharedFrom?: string;
   /** Fil de partage (share_offer.thread_id) dont ce constat est issu. */
   sharedThreadId?: string;
+  /** Notes de partage signées (les deux parties écrivent, rien n'est écrasé). */
+  shareNotes?: ShareNote[];
 };
 
 export type FdsRealityTheme =

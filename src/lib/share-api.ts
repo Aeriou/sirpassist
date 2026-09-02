@@ -52,6 +52,29 @@ export const apiSendShare = createServerFn({ method: "POST" })
     });
   });
 
+/** Aperçu de la charge utile SANS consommer la proposition (destinataire seul). */
+export const apiPreviewShare = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { offerId: string }) => input)
+  .handler(
+    async ({
+      data,
+      context,
+    }): Promise<
+      | { ok: false }
+      | { ok: true; kind: "visit" | "anomaly"; payload: SharePayloadV1 | null }
+    > => {
+      const sql = await getSqlClient();
+      const res = await sdb.getPayloadForRecipient(sql, data.offerId, context.userId);
+      if (!res.ok) return { ok: false };
+      return {
+        ok: true,
+        kind: res.kind,
+        payload: (res.payload as SharePayloadV1 | null) ?? null,
+      };
+    },
+  );
+
 export const apiListIncomingShares = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {

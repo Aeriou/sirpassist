@@ -11,10 +11,13 @@ import {
   apiCancelShare,
   apiListIncomingShares,
   apiListOutgoingShares,
+  apiPreviewShare,
   apiRespondShare,
 } from "@/lib/share-api";
 import type { ShareRow } from "@/lib/share-db";
-import { isSharePayloadV1 } from "@/lib/share-payload";
+import { isSharePayloadV1, type SharePayloadV1 } from "@/lib/share-payload";
+import type { SharedImportPlan } from "@/lib/share-merge";
+import { ShareImportDialog } from "@/components/share-import-dialog";
 import { useSipr } from "@/lib/store";
 import { formatStamp } from "@/lib/format";
 
@@ -43,6 +46,7 @@ function PartagesPage() {
   const [outgoing, setOutgoing] = useState<ShareRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<string | null>(null);
+  const [pending, setPending] = useState<{ offer: ShareRow; payload: SharePayloadV1 } | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -66,26 +70,53 @@ function PartagesPage() {
     return () => window.clearInterval(t);
   }, [isPending, session?.user, refresh]);
 
-  async function respond(offer: ShareRow, accept: boolean) {
+  async function openImport(offer: ShareRow) {
     setActing(offer.id);
     try {
-      const res = await apiRespondShare({ data: { offerId: offer.id, accept } });
+      const prev = await apiPreviewShare({ data: { offerId: offer.id } });
+      if (!prev.ok || !prev.payload || !isSharePayloadV1(prev.payload)) {
+        toast.error("Proposition indisponible (déjà traitée ?).");
+        void refresh();
+        return;
+      }
+      setPending({ offer, payload: prev.payload });
+    } catch {
+      toast.error("Chargement impossible (réseau).");
+    } finally {
+      setActing(null);
+    }
+  }
+
+  async function confirmImport(plan: SharedImportPlan) {
+    if (!pending) return;
+    const { offer, payload } = pending;
+    setPending(null);
+    try {
+      const res = await apiRespondShare({ data: { offerId: offer.id, accept: true } });
       if (!res.ok) {
         toast.error("Proposition introuvable (déjà traitée ?).");
         void refresh();
         return;
       }
-      if (accept && res.payload && isSharePayloadV1(res.payload)) {
-        const { visitId } = importSharedPayload(res.payload, {
-          threadId: offer.thread_id,
-          isReturn: Boolean(offer.reply_to),
-        });
-        toast.success(`« ${offer.title} » importé dans vos dossiers.`);
-        void refresh();
-        navigate({ to: "/visite/$id", params: { id: visitId } });
-        return;
-      }
-      toast.message(accept ? "Proposition acceptée." : "Proposition refusée.");
+      const { visitId } = importSharedPayload(payload, {
+        threadId: offer.thread_id,
+        isReturn: Boolean(offer.reply_to),
+        plan,
+      });
+      toast.success(plan.isMerge ? `« ${offer.title} » mis à jour.` : `« ${offer.title} » importé.`);
+      void refresh();
+      navigate({ to: "/visite/$id", params: { id: visitId } });
+    } catch {
+      toast.error("Import impossible (réseau).");
+    }
+  }
+
+  async function decline(offer: ShareRow) {
+    setActing(offer.id);
+    try {
+      const res = await apiRespondShare({ data: { offerId: offer.id, accept: false } });
+      if (!res.ok) toast.error("Proposition introuvable (déjà traitée ?).");
+      else toast.message("Proposition refusée.");
       void refresh();
     } catch {
       toast.error("Action impossible (réseau).");
@@ -162,15 +193,15 @@ function PartagesPage() {
                   <div className="flex flex-wrap gap-2 pt-1">
                     <Button
                       size="sm"
-                      onClick={() => void respond(o, true)}
+                      onClick={() => void openImport(o)}
                       disabled={acting === o.id}
                     >
-                      Accepter
+                      Examiner
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => void respond(o, false)}
+                      onClick={() => void decline(o)}
                       disabled={acting === o.id}
                     >
                       Refuser
@@ -225,6 +256,18 @@ function PartagesPage() {
           </ul>
         )}
       </section>
+
+      {pending ? (
+        <ShareImportDialog
+          open
+          onOpenChange={(v) => {
+            if (!v) setPending(null);
+          }}
+          offer={pending.offer}
+          payload={pending.payload}
+          onConfirm={(plan) => void confirmImport(plan)}
+        />
+      ) : null}
     </div>
   );
 }

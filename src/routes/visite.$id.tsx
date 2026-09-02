@@ -8,6 +8,7 @@ import { FdsCard } from "@/components/fds-card";
 import { RpsCard } from "@/components/rps-card";
 import { PlaceEditor } from "@/components/place-editor";
 import { ShareButton } from "@/components/share-button";
+import { ShareNotes } from "@/components/share-notes";
 import { SignaturePad } from "@/components/signature-pad";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -265,6 +266,8 @@ function VisitDetail() {
           </div>
         )}
       </section>
+
+      <ShareNotes scope="visit" id={visit.id} />
 
       <Dialog open={placeOpen} onOpenChange={setPlaceOpen}>
         <DialogContent
