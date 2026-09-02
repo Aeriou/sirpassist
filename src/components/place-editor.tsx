@@ -44,8 +44,9 @@ export function PlaceEditor({
       }
       setHits(res.hits);
       if (res.hits.length === 0) {
-        onChange({ ...value, verified: false, label: "" });
-        toast.error("Adresse introuvable en Belgique — elle ne peut pas être validée.");
+        toast.error(
+          "Adresse introuvable — corrigez l'orthographe, posez le point sur la carte, ou remplissez les champs à la main.",
+        );
       }
     } finally {
       setBusy(null);
@@ -137,6 +138,11 @@ export function PlaceEditor({
     onChange({ ...value, ...patch });
   }
 
+  function patchCivic(patch: Partial<Pick<Place, "street" | "number" | "postcode" | "city">>) {
+    const merged = { ...value, ...patch };
+    onChange({ ...merged, source: "manual", verified: false, label: formatCivic(merged) });
+  }
+
   const indoor = formatIndoor(value);
 
   return (
@@ -202,21 +208,38 @@ export function PlaceEditor({
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Field label="Rue" className="col-span-2">
-          <Input value={value.street} readOnly className="opacity-90" />
+          <Input
+            value={value.street}
+            onChange={(e) => patchCivic({ street: e.target.value })}
+            placeholder="Rue de la Loi"
+          />
         </Field>
         <Field label="N°">
-          <Input value={value.number} readOnly className="opacity-90" />
+          <Input
+            value={value.number}
+            onChange={(e) => patchCivic({ number: e.target.value })}
+            placeholder="16"
+          />
         </Field>
         <Field label="Code postal">
-          <Input value={value.postcode} readOnly className="opacity-90" />
+          <Input
+            value={value.postcode}
+            onChange={(e) => patchCivic({ postcode: e.target.value.replace(/\D/g, "").slice(0, 4) })}
+            inputMode="numeric"
+            placeholder="1000"
+          />
         </Field>
         <Field label="Ville" className="col-span-2 sm:col-span-2">
-          <Input value={value.city} readOnly className="opacity-90" />
+          <Input
+            value={value.city}
+            onChange={(e) => patchCivic({ city: e.target.value })}
+            placeholder="Bruxelles"
+          />
         </Field>
       </div>
       <p className="text-xs text-subtle">
-        Rue, n° et code postal viennent uniquement d'une adresse existante (GPS, carte ou recherche). Une
-        adresse inventée ne passe pas.
+        Le plus fiable : GPS, carte ou recherche (adresse « Vérifiée »). Vous pouvez aussi remplir
+        ces champs à la main — l'adresse sera alors marquée « Non vérifiée ».
       </p>
 
       <p className="pt-1 text-xs font-medium tracking-wide text-muted">Lieu précis sur site</p>

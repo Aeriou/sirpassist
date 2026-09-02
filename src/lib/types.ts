@@ -90,7 +90,7 @@ export type Place = {
   lng?: number;
   label: string;
   verified: boolean;
-  source?: "gps" | "map" | "search";
+  source?: "gps" | "map" | "search" | "manual";
 };
 
 export type KinneyJustification = {

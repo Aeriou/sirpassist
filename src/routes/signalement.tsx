@@ -78,6 +78,9 @@ function Signalement() {
   }, [visit?.id]);
 
   const canAnalyze = useMemo(() => speech.trim().length > 4 || Boolean(photo), [speech, photo]);
+  // Adresse utilisable même sans coordonnées (saisie manuelle des champs).
+  const placeLabel =
+    geoLabel(geo) || (place.street || place.city ? formatPlace(place) : "");
 
   async function createFiche() {
     if (!canAnalyze) {
@@ -90,12 +93,12 @@ function Signalement() {
     try {
       if (!online) {
         const local = parseObservation(speech);
-        if (geo?.address && local.location === "Non précisé") local.location = geo.address;
+        if (placeLabel && local.location === "Non précisé") local.location = placeLabel;
         setDraft(local);
         setVoice({
           danger: localVoice.danger || local.description,
           measure: localVoice.measure || local.correctiveAction,
-          zone: localVoice.zone || geoLabel(geo) || local.location,
+          zone: localVoice.zone || placeLabel || local.location,
         });
         toast.message("Fiche locale — synchro IA dès le retour du réseau.");
         return;
@@ -103,8 +106,8 @@ function Signalement() {
       const res = await analyzeAnomaly({ data: { transcription: speech, photo } });
       if (res.ok) {
         const d = res.draft;
-        if (geo?.address && (!d.location || d.location === "Non précisé")) {
-          d.location = geo.address;
+        if (placeLabel && (!d.location || d.location === "Non précisé")) {
+          d.location = placeLabel;
         }
         setDraft(d);
         setVoice({
