@@ -4,6 +4,7 @@ import { MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { KinneyCalculator } from "@/components/kinney-calculator";
 import { PhotoCapture } from "@/components/photo-capture";
+import { PlaceEditor } from "@/components/place-editor";
 import { VoiceCapture } from "@/components/voice-capture";
 import { VisitPicker } from "@/components/visit-picker";
 import { PlanBanner } from "@/components/plan-banner";
@@ -13,7 +14,7 @@ import { analyzeAnomaly } from "@/lib/ai";
 import { THEMES } from "@/lib/code-bien-etre";
 import { addDays, isoDate, isoDay } from "@/lib/format";
 import { geoLabel, locatePlaceFromGps } from "@/lib/geo";
-import { formatPlace, placeToGeo } from "@/lib/place";
+import { formatPlace, placeFromGeo, placeToGeo } from "@/lib/place";
 import { buildKinney } from "@/lib/kinney";
 import { useOnline } from "@/lib/online";
 import { parseObservation, type AnomalyDraft } from "@/lib/parse-observation";
@@ -22,7 +23,7 @@ import { currentAuthor, selectWorkspace, useSipr, useWorkspaceVisits } from "@/l
 import { blockedMessage } from "@/lib/plan";
 import { usePlan } from "@/lib/use-plan";
 import { matchVisitByName, visitLabel } from "@/lib/workspace";
-import type { GeoFix, ThemeId, Urgency, VoiceSections } from "@/lib/types";
+import type { GeoFix, Place, ThemeId, Urgency, VoiceSections } from "@/lib/types";
 
 type Search = { visitId?: string };
 
@@ -66,11 +67,14 @@ function Signalement() {
   const [draft, setDraft] = useState<AnomalyDraft | null>(null);
   const [voice, setVoice] = useState<VoiceSections>({ danger: "", measure: "", zone: "" });
   const [geo, setGeo] = useState<GeoFix | undefined>(visit?.geo ?? placeToGeo(visit?.place));
+  const [place, setPlace] = useState<Place>(() => visit?.place ?? placeFromGeo(visit?.geo));
+  const [addrOpen, setAddrOpen] = useState(false);
   const [capturedAt, setCapturedAt] = useState(isoDate());
   const [locating, setLocating] = useState(false);
 
   useEffect(() => {
     setGeo(visit?.geo ?? placeToGeo(visit?.place));
+    setPlace(visit?.place ?? placeFromGeo(visit?.geo));
   }, [visit?.id]);
 
   const canAnalyze = useMemo(() => speech.trim().length > 4 || Boolean(photo), [speech, photo]);
@@ -204,31 +208,54 @@ function Signalement() {
 
       <PlanBanner view={plan} />
 
-      <div className="flex flex-wrap items-center gap-2 rounded-xl bg-surface px-3 py-2 text-sm shadow-[var(--shadow-border)]">
-        <MapPin className="size-4 shrink-0 text-accent" />
-        <span className="min-w-0 flex-1">
-          {geoLabel(geo) || (visit?.place ? formatPlace(visit.place) : "Adresse de la visite non définie")}
-        </span>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled={locating}
-          onClick={async () => {
-            setLocating(true);
-            try {
-              const p = await locatePlaceFromGps();
-              setGeo(placeToGeo(p));
-              toast.success("GPS du constat verrouillé.");
-            } catch (err) {
-              toast.error(err instanceof Error ? err.message : "GPS indisponible.");
-            } finally {
-              setLocating(false);
-            }
-          }}
-        >
-          {locating ? "GPS…" : "GPS"}
-        </Button>
+      <div className="rounded-xl bg-surface px-3 py-2 shadow-[var(--shadow-border)]">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <MapPin className="size-4 shrink-0 text-accent" />
+          <span className="min-w-0 flex-1">
+            {geoLabel(geo) ||
+              (place.street || place.city ? formatPlace(place) : "Adresse de la visite non définie")}
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant={addrOpen ? "secondary" : "outline"}
+            onClick={() => setAddrOpen((v) => !v)}
+          >
+            {addrOpen ? "Fermer" : "Saisir l'adresse"}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={locating}
+            onClick={async () => {
+              setLocating(true);
+              try {
+                const p = await locatePlaceFromGps();
+                setPlace(p);
+                setGeo(placeToGeo(p));
+                toast.success("GPS du constat verrouillé.");
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : "GPS indisponible.");
+              } finally {
+                setLocating(false);
+              }
+            }}
+          >
+            {locating ? "GPS…" : "GPS"}
+          </Button>
+        </div>
+        {addrOpen ? (
+          <div className="mt-3 border-t border-border pt-3">
+            <PlaceEditor
+              value={place}
+              onChange={(p) => {
+                setPlace(p);
+                setGeo(placeToGeo(p));
+              }}
+            />
+          </div>
+        ) : null}
       </div>
 
       <VisitPicker
