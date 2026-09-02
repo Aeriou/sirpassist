@@ -15,7 +15,6 @@ import {
   Users,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { CloudSyncHost } from "./cloud-sync-host";
 import { Logo } from "./logo";
 import { Button } from "./ui/button";
 import { Dialog, DialogContent } from "./ui/dialog";
@@ -101,7 +100,6 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="stripe min-h-dvh bg-bg text-fg">
-      <CloudSyncHost />
       <aside className="fixed top-0 left-0 hidden h-dvh w-60 flex-col border-r border-border bg-surface md:flex">
         <div className="px-4 py-5">
           <Logo />

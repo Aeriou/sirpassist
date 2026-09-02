@@ -1,6 +1,7 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { AuthProvider } from "@/lib/auth/provider";
 import { SessionBridge } from "@/components/session-bridge";
+import { UserStoreHost } from "@/components/user-store-host";
 import { ChunkReloadGuard } from "@/components/chunk-reload-guard";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { AppShell } from "@/components/app-shell";
@@ -49,6 +50,7 @@ export const Route = createRootRoute({
         <ChunkReloadGuard />
         <AuthProvider>
           <SessionBridge />
+          <UserStoreHost />
           <AppShell>
             <Outlet />
           </AppShell>

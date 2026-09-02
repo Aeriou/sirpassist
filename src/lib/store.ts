@@ -23,6 +23,10 @@ import type {
 import { emptyDeleted, mergeById, mergeDeleted, rememberIds } from "./cloud-sync";
 import type { SharePayloadV1 } from "./share-payload";
 import { mergeShareNotes, type SharedImportPlan } from "./share-merge";
+import {
+  applyUserSnapshot as applyUserSnapshotPure,
+  type UserSnapshot,
+} from "./user-snapshot";
 import { uid } from "./utils";
 import { isoDate, isoDay } from "./format";
 import { planView, trialEndFrom } from "./plan";
@@ -98,6 +102,7 @@ type State = {
   activatePlan: (plan: "basic" | "pro", billing?: { stripeCustomerId?: string; stripeSubscriptionId?: string }) => void;
   patchSessionUser: (patch: Partial<SiprUser>) => void;
   applyCloudSnapshot: (snap: WorkspaceCloudSnapshot) => void;
+  applyUserSnapshot: (snap: UserSnapshot) => void;
   importSharedPayload: (
     payload: SharePayloadV1,
     opts: { threadId: string; isReturn?: boolean; plan?: SharedImportPlan },
@@ -748,6 +753,29 @@ export const useSipr = create<State>()(
           deleted,
         });
         get().switchWorkspace(ws.id);
+      },
+      applyUserSnapshot: (snap) => {
+        const s = get();
+        set(
+          applyUserSnapshotPure(
+            {
+              profile: s.profile,
+              workspaces: s.workspaces,
+              visits: s.visits,
+              anomalies: s.anomalies,
+              fds: s.fds,
+              rps: s.rps,
+              pgpByWorkspace: s.pgpByWorkspace,
+              ackedReminders: s.ackedReminders,
+              tickets: s.tickets,
+              deleted: s.deleted,
+              activeWorkspaceId: s.activeWorkspaceId,
+              pgp: s.pgp,
+            },
+            snap,
+            DEFAULT_PROFILE,
+          ),
+        );
       },
       importSharedPayload: (payload, opts) => {
         const st = get();
