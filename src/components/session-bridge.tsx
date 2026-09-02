@@ -40,7 +40,10 @@ export function SessionBridge() {
     if (baUser) {
       const email = (baUser.email ?? "").toLowerCase();
       const localId = `ba_${baUser.id}`;
-      const target = st.users.find((u) => u.id === localId || (email && u.email === email));
+      // Correspondance UNIQUEMENT sur l'id de session serveur. On n'adopte jamais
+      // un ancien compte local (`user_…`, d'avant la refonte) par e-mail : il
+      // ramènerait son espace/profil périmés (souvent la démo).
+      const target = st.users.find((u) => u.id === localId);
 
       if (target) {
         if (st.sessionUserId !== target.id) st.signInUser(target.id);
@@ -50,9 +53,13 @@ export function SessionBridge() {
         const owned = st.workspaces.filter((w) => w.id !== DEMO_WORKSPACE_ID);
         const wsId =
           owned[0]?.id ?? st.createWorkspace({ kind: "independant", name: "Mon espace" }).id;
+        const friendlyName =
+          baUser.name && !baUser.name.includes("@")
+            ? baUser.name
+            : email.split("@")[0] || "Conseiller";
         st.addUser({
           id: localId,
-          name: baUser.name || email || "Conseiller",
+          name: friendlyName,
           email,
           title: "Conseiller en prévention",
           level: 3,
