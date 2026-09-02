@@ -440,7 +440,19 @@ function ProfileDialog({ onReset, onClose }: { onReset: () => void; onClose: () 
               ))}
             </div>
           </fieldset>
-          <p className="text-xs text-muted">Enregistré automatiquement.</p>
+          <Button
+            type="button"
+            className="w-full"
+            onClick={() => {
+              toast.success("Informations enregistrées.");
+              onClose();
+            }}
+          >
+            Enregistrer
+          </Button>
+          <p className="text-center text-xs text-muted">
+            Vos changements sont gardés dès la saisie — ce bouton ferme simplement la fenêtre.
+          </p>
         </div>
 
         <TwoFactorCard />
