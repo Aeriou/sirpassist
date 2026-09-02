@@ -98,12 +98,17 @@ export function computeSharedPlan(
   store: StoreSlice,
   payload: SharePayloadV1,
   threadId: string,
+  targetVisitId?: string,
 ): SharedImportPlan {
-  const target = store.visits.find(
-    (v) =>
-      (v.sharedThreadId && v.sharedThreadId === threadId) ||
-      (v.shareOriginId && payload.visit.shareOriginId && v.shareOriginId === payload.visit.shareOriginId),
-  );
+  const target = targetVisitId
+    ? store.visits.find((v) => v.id === targetVisitId)
+    : store.visits.find(
+        (v) =>
+          (v.sharedThreadId && v.sharedThreadId === threadId) ||
+          (v.shareOriginId &&
+            payload.visit.shareOriginId &&
+            v.shareOriginId === payload.visit.shareOriginId),
+      );
 
   const localAnoms = target
     ? store.anomalies.filter((a) => a.visitId === target.id)

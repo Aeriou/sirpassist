@@ -9,6 +9,7 @@ import { RpsCard } from "@/components/rps-card";
 import { PlaceEditor } from "@/components/place-editor";
 import { ShareButton } from "@/components/share-button";
 import { ShareNotes } from "@/components/share-notes";
+import { SiblingMergeButton } from "@/components/sibling-merge-button";
 import { SignaturePad } from "@/components/signature-pad";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -267,6 +268,7 @@ function VisitDetail() {
         )}
       </section>
 
+      <SiblingMergeButton visitId={visit.id} />
       <ShareNotes scope="visit" id={visit.id} />
 
       <Dialog open={placeOpen} onOpenChange={setPlaceOpen}>

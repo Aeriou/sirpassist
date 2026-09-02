@@ -268,6 +268,25 @@ check("fusion -> constat absent de l'entrant => suppression proposée (garder pa
   planMerge.removals.length === 1 && planMerge.removals[0]!.localId === "a3" && planMerge.removals[0]!.choice === "keep");
 check("fusion -> 1 note de partage entrante nouvelle", planMerge.incomingNoteCount === 1);
 
+// -- 2bis. cible explicite (bouton « reporter » entre deux dossiers frères) --
+const twoSiblings = [
+  { ...localVisit, id: "v_orig", sharedThreadId: "thr_9", shareOriginId: "ov9" },
+  { ...localVisit, id: "v_recv", sharedThreadId: "thr_9", shareOriginId: "ov9", name: "Atelier 3 — retour de Alice" },
+];
+const planTargeted = computeSharedPlan(
+  { visits: twoSiblings, anomalies: [mkAnomaly({ id: "ax", visitId: "v_orig", shareOriginId: "oa_x", title: "X" })] } as any,
+  {
+    v: 1, kind: "visit", sharedAt: "", byName: "Alice", byEmail: "a@x",
+    visit: { name: "Atelier 3", company: "Atelier 3", shareOriginId: "ov9", shareNotes: [] } as any,
+    anomalies: [mkAnomaly({ shareOriginId: "oa_x", title: "X modifié", description: "chg" })] as any,
+  },
+  "thr_9",
+  "v_orig",
+);
+check("cible explicite -> targetVisitId respecté (v_orig, pas v_recv)", planTargeted.targetVisitId === "v_orig" && planTargeted.isMerge === true);
+check("cible explicite -> le constat commun ressort 'changed'/'take'",
+  planTargeted.incoming[0]?.state === "changed" && planTargeted.incoming[0]?.choice === "take" && planTargeted.incoming[0]?.localId === "ax");
+
 // -- 3. mergeShareNotes : dédoublonne par id, trie par date --
 const merged = mergeShareNotes(
   [{ id: "n1", author: "Bob", at: "2026-09-02T00:00:00Z", text: "b" }],
