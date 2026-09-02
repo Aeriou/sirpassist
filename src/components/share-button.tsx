@@ -101,7 +101,11 @@ export function ShareButton({
             ? "Aucun compte SiprAssist avec cette adresse e-mail."
             : res.reason === "self"
               ? "C'est votre propre adresse."
-              : "Envoi impossible.",
+              : res.reason === "sender_pending"
+                ? "Votre compte est en attente de validation — le partage sera possible ensuite."
+                : res.reason === "target_pending"
+                  ? "Ce compte n'est pas encore validé par l'administrateur."
+                  : "Envoi impossible.",
         );
         return;
       }

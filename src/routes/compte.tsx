@@ -6,6 +6,7 @@ import { AuthPanel } from "@/components/auth-panel";
 import { doSignOut } from "@/lib/auth/sign-out";
 import { CloudCard } from "@/components/cloud-card";
 import { GroupSection } from "@/components/group-section";
+import { AccountPendingBanner, PendingAccountsAdmin } from "@/components/account-approval";
 import { PlanBanner } from "@/components/plan-banner";
 import { PlanPicker } from "@/components/plan-picker";
 import { WorkspaceSwipeRow } from "@/components/workspace-swipe";
@@ -119,6 +120,9 @@ function ComptePage() {
           5 signalements.
         </p>
       </header>
+
+      <AccountPendingBanner />
+      <PendingAccountsAdmin />
 
       {!session ? (
         <PlanBanner

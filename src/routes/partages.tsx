@@ -3,6 +3,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Inbox, Send } from "lucide-react";
 import { AuthPanel } from "@/components/auth-panel";
+import { AccountPendingBanner } from "@/components/account-approval";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -162,6 +163,8 @@ function PartagesPage() {
           données sans votre acceptation.
         </p>
       </header>
+
+      <AccountPendingBanner />
 
       <section className="space-y-3">
         <h2 className="flex items-center gap-2 text-sm font-medium">

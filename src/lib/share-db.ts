@@ -8,6 +8,18 @@
 import type { Sql } from "./db";
 
 export type ShareKind = "visit" | "anomaly";
+
+/**
+ * Compte autorisé à partager ? (copie locale de `account-db.isAccountApproved`
+ * pour garder ce module sans import de valeur — cf. les dry-runs Node.)
+ * « pas de ligne » = compte d'avant la validation, considéré autorisé.
+ */
+async function accountApproved(sql: Sql, userId: string): Promise<boolean> {
+  const rows = await sql<{ status: string }>`
+    select status from account_approval where user_id = ${userId} limit 1
+  `;
+  return !rows[0] || rows[0].status === "approved";
+}
 export type ShareStatus = "pending" | "accepted" | "declined" | "cancelled";
 
 export type ShareRow = {
@@ -59,12 +71,21 @@ export async function sendOffer(
     replyTo?: string | null;
   },
 ): Promise<
-  | { ok: false; reason: "unknown_user" | "self" | "bad_reply" }
+  | {
+      ok: false;
+      reason: "unknown_user" | "self" | "bad_reply" | "sender_pending" | "target_pending";
+    }
   | { ok: true; id: string; threadId: string; toName: string; toEmail: string }
 > {
+  if (!(await accountApproved(sql, input.fromUserId))) {
+    return { ok: false, reason: "sender_pending" };
+  }
   const target = await findUserByEmail(sql, input.toEmail);
   if (!target) return { ok: false, reason: "unknown_user" };
   if (target.id === input.fromUserId) return { ok: false, reason: "self" };
+  if (!(await accountApproved(sql, target.id))) {
+    return { ok: false, reason: "target_pending" };
+  }
 
   let threadId = newId("thr");
   if (input.replyTo) {

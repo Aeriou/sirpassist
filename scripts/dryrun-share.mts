@@ -51,6 +51,7 @@ pg.exec(`
   );
 `);
 pg.exec(readFileSync(join(root, "migrations/0006_share.sql"), "utf8"));
+pg.exec(readFileSync(join(root, "migrations/0008_account_approval.sql"), "utf8"));
 const sql = makeSql(pg);
 
 const ALICE = "user_alice";
@@ -174,6 +175,26 @@ const bobReturns = await sdb.sendOffer(sql, {
 });
 check("Bob renvoie sur le même fil", bobReturns.ok === true && bobReturns.ok && bobReturns.threadId === threadId);
 check("Alice reçoit le retour", (await sdb.countIncoming(sql, ALICE)) === 1);
+
+// -- validation de compte : un compte 'pending' ne peut ni envoyer ni être ciblé --
+await sql`insert into "user" (id, name, email, "emailVerified") values ('user_dave', 'Dave', 'dave@example.com', true)`;
+await sql`insert into account_approval (user_id, email, name, status) values ('user_dave', 'dave@example.com', 'Dave', 'pending')`;
+const daveSends = await sdb.sendOffer(sql, {
+  fromUserId: "user_dave", fromName: "Dave", fromEmail: "dave@example.com",
+  toEmail: "alice@example.com", kind: "visit", title: "X", summary: "", payload: { v: 1 },
+});
+check("compte en attente -> ne peut pas envoyer (sender_pending)", daveSends.ok === false && daveSends.reason === "sender_pending");
+const toDave = await sdb.sendOffer(sql, {
+  fromUserId: ALICE, fromName: "Alice", fromEmail: "alice@example.com",
+  toEmail: "dave@example.com", kind: "visit", title: "X", summary: "", payload: { v: 1 },
+});
+check("compte en attente -> ne peut pas être ciblé (target_pending)", toDave.ok === false && toDave.reason === "target_pending");
+await sql`update account_approval set status = 'approved' where user_id = 'user_dave'`;
+const toDaveOk = await sdb.sendOffer(sql, {
+  fromUserId: ALICE, fromName: "Alice", fromEmail: "alice@example.com",
+  toEmail: "dave@example.com", kind: "visit", title: "X", summary: "", payload: { v: 1 },
+});
+check("une fois validé -> le partage passe", toDaveOk.ok === true);
 
 // ---------------------------------------------------------------------------
 // Planificateur de rapprochement (pur) — computeSharedPlan / mergeShareNotes

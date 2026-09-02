@@ -37,6 +37,7 @@ import { randomBytes } from "node:crypto";
 import { Pool } from "pg";
 import { ensureDbReady, getPglite } from "../db";
 import { emailAndPasswordEnabled } from "./email-password";
+import { emailSendingEnabled, sendVerificationEmail } from "./send-email.server";
 import { GATE_PROVIDER_ID, gateIdentitySessions } from "./gate-session.server";
 import { GROK_PROVIDERS } from "./providers";
 import { pgliteDialect } from "./pglite-dialect";
@@ -211,7 +212,62 @@ export const auth = betterAuth({
   session: { cookieCache: { enabled: true, maxAge: 300 } },
 
   // Local email/password — toggled only via `./email-password` (not a plugin).
-  ...(emailAndPasswordEnabled ? { emailAndPassword: { enabled: true } } : {}),
+  ...(emailAndPasswordEnabled
+    ? {
+        emailAndPassword: {
+          enabled: true,
+          // N'exiger la confirmation d'adresse que si l'envoi d'e-mails est
+          // configuré (RESEND_API_KEY). Sinon la validation propriétaire suffit.
+          requireEmailVerification: emailSendingEnabled(),
+        },
+      }
+    : {}),
+
+  // Confirmation d'adresse par lien e-mail — DORMANTE sans RESEND_API_KEY.
+  ...(emailSendingEnabled()
+    ? {
+        emailVerification: {
+          sendOnSignUp: true,
+          autoSignInAfterVerification: true,
+          sendVerificationEmail: async ({
+            user,
+            url,
+          }: {
+            user: { email: string };
+            url: string;
+          }) => {
+            await sendVerificationEmail(user.email, url);
+          },
+        },
+      }
+    : {}),
+
+  // Nouvel utilisateur ⇒ ligne de validation (`pending`), sauf e-mail
+  // propriétaire ou `ACCOUNTS_AUTO_APPROVE=true`. N'échoue jamais l'inscription.
+  databaseHooks: {
+    user: {
+      create: {
+        after: async (user: { id: string; email?: string | null; name?: string | null }) => {
+          try {
+            const { getSql } = await import("../db");
+            const { ensureApprovalRow } = await import("../account-db");
+            const { isOwnerEmail } = await import("../plan-server");
+            const email = (user.email ?? "").toLowerCase();
+            await ensureApprovalRow(await getSql(), {
+              userId: user.id,
+              email,
+              name: user.name ?? "",
+              autoApprove:
+                isOwnerEmail(email) ||
+                process.env.ACCOUNTS_AUTO_APPROVE?.trim() === "true",
+            });
+          } catch {
+            /* ne jamais bloquer l'inscription pour ça */
+          }
+        },
+      },
+    },
+  },
 
   // `__Host-` prefixed cookies: the browser REFUSES any same-named cookie that
   // carries a `Domain` attribute, so a sibling `*.grok.me` app cannot "toss" a
