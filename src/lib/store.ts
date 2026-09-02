@@ -22,8 +22,7 @@ import type {
 import { emptyDeleted, mergeById, mergeDeleted, rememberIds } from "./cloud-sync";
 import { uid } from "./utils";
 import { isoDate, isoDay } from "./format";
-import { isAdminEmail, planView, trialEndFrom } from "./plan";
-import { withAdminEntitlements } from "./admin-account";
+import { planView, trialEndFrom } from "./plan";
 import { emptyPgp, lineFromAnomaly, lineFromRps } from "./pgp";
 import {
   mergePicks,
@@ -440,13 +439,15 @@ export const useSipr = create<State>()(
       },
       addUser: (u, opts) => {
         const createdAt = u.createdAt || isoDate();
-        const user: SiprUser = withAdminEntitlements({
+        // Le forfait est décidé par le serveur (allowlist propriétaire +
+        // sipr_billing) et poussé par SessionBridge — ici on met juste un défaut.
+        const user: SiprUser = {
           ...u,
           createdAt,
-          plan: isAdminEmail(u.email) ? "pro" : (u.plan ?? "trial"),
+          plan: u.plan ?? "trial",
           trialEndsAt: u.trialEndsAt ?? trialEndFrom(createdAt.slice(0, 10)),
           homeWorkspaceId: u.homeWorkspaceId ?? u.workspaceId,
-        });
+        };
         const users = get().users.some((x) => x.id === user.id || x.email === user.email)
           ? get().users.map((x) =>
               x.id === user.id || x.email === user.email
@@ -480,12 +481,8 @@ export const useSipr = create<State>()(
       },
       upsertUser: (u) => get().addUser(u, { session: false }),
       signInUser: (id) => {
-        const u = get().users.find((x) => x.id === id);
-        if (!u) return;
-        const next = isAdminEmail(u.email) && u.plan !== "pro" ? { ...u, plan: "pro" as const } : u;
-        if (next !== u) {
-          set({ users: get().users.map((x) => (x.id === id ? next : x)) });
-        }
+        const next = get().users.find((x) => x.id === id);
+        if (!next) return;
         set({
           sessionUserId: next.id,
           profile: {
@@ -827,12 +824,12 @@ export const useSipr = create<State>()(
         const users = (p.users ?? []).map((u) => {
           const createdAt = u.createdAt || isoDate();
           const plan =
-            isAdminEmail(u.email) || u.plan === "pro"
+            u.plan === "pro"
               ? ("pro" as const)
               : u.plan === "basic"
                 ? ("basic" as const)
                 : ("trial" as const);
-          return withAdminEntitlements({
+          return {
             ...u,
             kind: u.kind ?? "entreprise",
             workspaceId: u.workspaceId || DEMO_WORKSPACE_ID,
@@ -843,7 +840,7 @@ export const useSipr = create<State>()(
             totpSecret: u.totpSecret,
             totpEnabled: u.totpEnabled,
             totpBackupHashes: u.totpBackupHashes,
-          });
+          };
         });
         return {
           ...current,
