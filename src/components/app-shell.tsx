@@ -12,6 +12,7 @@ import {
   LogOut,
   ScanLine,
   ShieldCheck,
+  UserCheck,
   Users,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -22,6 +23,7 @@ import { Field, Input } from "./ui/input";
 import { useOnline } from "@/lib/online";
 import { doSignOut } from "@/lib/auth/sign-out";
 import { apiShareInboxCount } from "@/lib/share-api";
+import { apiListPendingAccounts } from "@/lib/account-api";
 import { TwoFactorCard } from "./two-factor-card";
 import { toast } from "sonner";
 import { buildReminders } from "@/lib/reminders";
@@ -165,6 +167,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <IconLink to="/conflits" count={conflictCount} label="Conflits de données" icon={GitMerge} tone="warn" />
           <RemindersLink count={reminderCount} />
           {sessionUserId ? <SharesLink /> : null}
+          {sessionUserId ? <PendingAccountsLink /> : null}
           <Link
             to="/support"
             className="relative flex size-11 items-center justify-center rounded-full bg-surface-2 text-fg"
@@ -200,6 +203,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <IconLink to="/conflits" count={conflictCount} label="Conflits de données" icon={GitMerge} tone="warn" />
             <RemindersLink count={reminderCount} />
             {sessionUserId ? <SharesLink /> : null}
+            {sessionUserId ? <PendingAccountsLink /> : null}
             <Link
               to="/support"
               className="relative flex size-11 items-center justify-center rounded-full bg-surface-2 text-fg"
@@ -299,6 +303,30 @@ function SharesLink() {
   return <IconLink to="/partages" count={count} label="Partages reçus" icon={Inbox} tone="warn" />;
 }
 
+function PendingAccountsLink() {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    const tick = () => {
+      apiListPendingAccounts()
+        .then((r) => {
+          if (alive) setCount(r.ok ? r.pending.length : 0);
+        })
+        .catch(() => {});
+    };
+    tick();
+    const t = window.setInterval(tick, 30_000);
+    return () => {
+      alive = false;
+      window.clearInterval(t);
+    };
+  }, []);
+  if (count === 0) return null;
+  return (
+    <IconLink to="/compte" count={count} label="Comptes à valider" icon={UserCheck} tone="warn" />
+  );
+}
+
 function IconLink({
   to,
   count,
@@ -306,7 +334,7 @@ function IconLink({
   icon: Icon,
   tone = "danger",
 }: {
-  to: "/rappels" | "/conflits" | "/partages";
+  to: "/rappels" | "/conflits" | "/partages" | "/compte";
   count: number;
   label: string;
   icon: typeof Bell;

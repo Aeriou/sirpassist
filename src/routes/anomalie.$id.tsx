@@ -53,7 +53,13 @@ function AnomalyPage() {
           <StatusBadge status={anomaly.status} />
           <ThemeChip id={anomaly.theme} />
         </div>
-        <h1 className="font-display text-2xl font-semibold">{anomaly.title}</h1>
+        <Field label="Titre du constat">
+          <Input
+            value={anomaly.title}
+            onChange={(e) => update(anomaly.id, { title: e.target.value })}
+            className="font-display text-lg font-semibold"
+          />
+        </Field>
         <p className="text-sm text-muted">
           {anomaly.location}
           {visit ? (

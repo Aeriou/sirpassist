@@ -14,10 +14,18 @@ import type { Visit } from "@/lib/types";
  * ce panneau permet, APRÈS relecture, de reporter les modifications de l'autre
  * version dans celui-ci — élément par élément, sans rien d'automatique.
  */
+const SHARE_TAG_RE = /\s+—\s+(?:partagé par|retour de)\s+.+$/u;
+export const stripShareTag = (s: string): string => s.replace(SHARE_TAG_RE, "").trim();
+
 export function SiblingMergeButton({ visitId }: { visitId: string }) {
   const cur = useSipr((s) => s.visits.find((v) => v.id === visitId));
   const visits = useSipr((s) => s.visits);
+  const anomalies = useSipr((s) => s.anomalies);
+  const updateVisit = useSipr((s) => s.updateVisit);
+  const updateAnomaly = useSipr((s) => s.updateAnomaly);
+  const removeVisit = useSipr((s) => s.removeVisit);
   const [target, setTarget] = useState<Visit | null>(null);
+  const [confirmKeep, setConfirmKeep] = useState(false);
 
   const siblings = useMemo(() => {
     if (!cur) return [];
@@ -30,6 +38,24 @@ export function SiblingMergeButton({ visitId }: { visitId: string }) {
   }, [visits, cur]);
 
   if (!cur || siblings.length === 0) return null;
+
+  function keepOnlyThis() {
+    if (!cur) return;
+    for (const s of siblings) removeVisit(s.id);
+    // Nettoyer le nom : ce dossier devient la version de référence.
+    if (SHARE_TAG_RE.test(cur.name)) updateVisit(cur.id, { name: stripShareTag(cur.name) });
+    for (const a of anomalies) {
+      if (a.visitId === cur.id && SHARE_TAG_RE.test(a.title)) {
+        updateAnomaly(a.id, { title: stripShareTag(a.title) });
+      }
+    }
+    setConfirmKeep(false);
+    toast.success(
+      siblings.length > 1
+        ? `${siblings.length} autres versions supprimées.`
+        : "Autre version supprimée.",
+    );
+  }
 
   return (
     <section className="space-y-2 rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
@@ -50,6 +76,28 @@ export function SiblingMergeButton({ visitId }: { visitId: string }) {
           </Button>
         ))}
       </div>
+
+      {confirmKeep ? (
+        <div className="rounded-xl bg-warn/15 p-3 text-sm">
+          <p className="text-warn">
+            Supprimer {siblings.length > 1 ? `les ${siblings.length} autres versions` : "l'autre version"} et
+            garder uniquement ce dossier
+            {SHARE_TAG_RE.test(cur.name) ? " (le nom est nettoyé de l'étiquette de partage)" : ""} ?
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button size="sm" className="text-danger" variant="outline" onClick={keepOnlyThis}>
+              Oui, ne garder que celui-ci
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setConfirmKeep(false)}>
+              Annuler
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button variant="ghost" size="sm" onClick={() => setConfirmKeep(true)}>
+          Ne garder que ce dossier-ci
+        </Button>
+      )}
 
       {target && cur ? (
         <SiblingMergeDialog

@@ -42,6 +42,7 @@ function VisitDetail() {
   const [placeOpen, setPlaceOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
   const [infoDraft, setInfoDraft] = useState({
+    name: visit?.name ?? "",
     company: visit?.company ?? "",
     interlocutor: visit?.interlocutor ?? "",
     date: visit?.date ?? "",
@@ -81,6 +82,7 @@ function VisitDetail() {
 
   function openInfo() {
     setInfoDraft({
+      name: current.name ?? "",
       company: current.company ?? "",
       interlocutor: current.interlocutor ?? "",
       date: current.date ?? "",
@@ -91,6 +93,7 @@ function VisitDetail() {
 
   function saveInfo() {
     updateVisit(current.id, {
+      name: infoDraft.name.trim() || current.name,
       company: infoDraft.company.trim() || current.company,
       interlocutor: infoDraft.interlocutor.trim(),
       date: infoDraft.date || current.date,
@@ -291,6 +294,13 @@ function VisitDetail() {
           description="Corriger une erreur de saisie sans recréer le dossier."
         >
           <div className="space-y-3">
+            <Field label="Nom du dossier">
+              <Input
+                value={infoDraft.name}
+                onChange={(e) => setInfoDraft({ ...infoDraft, name: e.target.value })}
+                placeholder="Atelier 3 Charleroi"
+              />
+            </Field>
             <Field label="Entreprise visée">
               <Input
                 value={infoDraft.company}
