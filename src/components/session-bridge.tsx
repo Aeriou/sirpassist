@@ -81,15 +81,10 @@ export function SessionBridge() {
       return;
     }
 
-    // Pas de session Better Auth : revenir à l'état invité si le profil / l'espace
-    // actif reflète encore un compte issu du pont (y compris après un rechargement
-    // où `sessionUserId` est déjà nul mais le profil est resté celui du compte).
-    const bridged = st.users.find((u) => u.id.startsWith("ba_"));
-    const stale =
-      st.sessionUserId?.startsWith("ba_") ||
-      (bridged &&
-        (st.profile.name === bridged.name || st.activeWorkspaceId === bridged.workspaceId));
-    if (stale) {
+    // Pas de session Better Auth : personne n'est connecté. La seule
+    // authentification est désormais Better Auth, donc TOUTE session locale
+    // (nouvelle « ba_ » comme ancienne « user_ ») est périmée -> état invité.
+    if (st.sessionUserId) {
       st.signOutUser();
       st.setProfile({ ...DEFAULT_PROFILE });
       if (st.workspaces.some((w) => w.id === DEMO_WORKSPACE_ID)) {
