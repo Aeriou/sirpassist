@@ -1,21 +1,27 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "@tanstack/react-router";
-import { Copy, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth/client";
 import {
   apiCancelJoinRequest,
   apiCreateWorkspace,
   apiDecideJoin,
+  apiInviteMember,
   apiListJoinRequests,
   apiListMembers,
+  apiListMyInvites,
+  apiListSentInvites,
   apiListWorkspaces,
   apiRemoveMember,
-  apiRequestJoin,
+  apiRespondInvite,
+  apiRevokeInvite,
 } from "@/lib/workspace-api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Field, Input, NativeSelect } from "@/components/ui/input";
+
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 type Group = {
   id: string;
@@ -23,10 +29,12 @@ type Group = {
   kind: string;
   code: string;
   role: "owner" | "member";
-  status: "active" | "pending";
+  status: "active" | "pending" | "invited";
   isOwner: boolean;
 };
 
+type Invite = { id: string; name: string; kind: string; owner_name: string };
+type SentInvite = { user_id: string; email: string; name: string };
 type JoinRequest = { user_id: string; email: string; name: string; requested_at: string };
 type Member = {
   userId: string;
@@ -37,23 +45,28 @@ type Member = {
 };
 
 /**
- * Groupes validés (modèle serveur). Rejoindre = demande ; le propriétaire
- * valide avant tout accès. Isolé de l'ancienne carte « Espaces ».
+ * Groupes (modèle serveur). Le propriétaire crée un groupe et invite ses
+ * collègues PAR E-MAIL ; chacun accepte l'invitation pour devenir membre.
+ * Plus de code à recopier. Les anciennes demandes par code (statut `pending`)
+ * restent gérables tant qu'il en existe.
  */
 export function GroupSection() {
   const { data: session, isPending } = authClient.useSession();
   const signedIn = Boolean(session?.user);
   const [groups, setGroups] = useState<Group[] | null>(null);
+  const [invites, setInvites] = useState<Invite[]>([]);
   const [busy, setBusy] = useState(false);
 
   const reload = useCallback(async () => {
     if (!signedIn) {
       setGroups(null);
+      setInvites([]);
       return;
     }
     try {
-      const res = await apiListWorkspaces();
-      if (res.ok) setGroups(res.workspaces);
+      const [ws, inv] = await Promise.all([apiListWorkspaces(), apiListMyInvites()]);
+      if (ws.ok) setGroups(ws.workspaces);
+      if (inv.ok) setInvites(inv.invites);
     } catch {
       /* réseau — on réessaiera au prochain rendu */
     }
@@ -61,7 +74,10 @@ export function GroupSection() {
 
   useEffect(() => {
     void reload();
-  }, [reload]);
+    if (!signedIn) return;
+    const t = window.setInterval(() => void reload(), 30_000);
+    return () => window.clearInterval(t);
+  }, [reload, signedIn]);
 
   if (isPending) {
     return (
@@ -74,10 +90,10 @@ export function GroupSection() {
   if (!signedIn) {
     return (
       <Card className="space-y-2">
-        <h2 className="font-display font-semibold">Groupe validé</h2>
+        <h2 className="font-display font-semibold">Groupe</h2>
         <p className="text-sm text-muted">
-          Créez un groupe, partagez un code, et <strong>validez chaque personne</strong> avant
-          qu'elle n'y accède. Ce système utilise la connexion sécurisée.
+          Créez un groupe et <strong>invitez vos collègues par e-mail</strong>. Chacun accepte
+          l'invitation pour rejoindre le groupe. Nécessite la connexion sécurisée.
         </p>
         <Button asChild variant="secondary">
           <Link to="/connexion">Se connecter</Link>
@@ -93,15 +109,16 @@ export function GroupSection() {
     <div className="space-y-4">
       <Card className="space-y-4">
         <div>
-          <h2 className="font-display font-semibold">Groupe validé</h2>
+          <h2 className="font-display font-semibold">Groupe</h2>
           <p className="text-sm text-muted">
-            Partagez le code du groupe. La personne envoie une demande, vous la validez, puis
-            elle rejoint le groupe. Un mauvais code ne donne accès à rien.
+            Créez un groupe, puis invitez vos collègues <strong>par leur adresse e-mail</strong>.
+            Ils reçoivent l'invitation ici et l'acceptent. Pas de code à recopier.
           </p>
         </div>
         <CreateGroupForm busy={busy} setBusy={setBusy} onDone={reload} />
-        <JoinGroupForm busy={busy} setBusy={setBusy} onDone={reload} />
       </Card>
+
+      {invites.length > 0 ? <InvitesInbox invites={invites} onChange={reload} /> : null}
 
       {pending.map((g) => (
         <PendingCard key={g.id} group={g} onChange={reload} />
@@ -109,10 +126,77 @@ export function GroupSection() {
       {active.map((g) => (
         <GroupCard key={g.id} group={g} onChange={reload} />
       ))}
-      {groups && groups.length === 0 ? (
+      {groups && groups.length === 0 && invites.length === 0 ? (
         <p className="text-sm text-muted">Aucun groupe pour l'instant.</p>
       ) : null}
     </div>
+  );
+}
+
+/** Invitations reçues — le compte accepte ou refuse. */
+function InvitesInbox({
+  invites,
+  onChange,
+}: {
+  invites: Invite[];
+  onChange: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+
+  async function respond(workspaceId: string, accept: boolean) {
+    setBusy(workspaceId);
+    try {
+      const res = await apiRespondInvite({ data: { workspaceId, accept } });
+      if (!res.ok) toast.error("Invitation introuvable.");
+      else toast.success(accept ? "Vous avez rejoint le groupe." : "Invitation refusée.");
+      await onChange();
+    } catch {
+      toast.error("Action impossible (réseau).");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <Card className="space-y-2">
+      <p className="text-xs font-medium tracking-wide text-accent">
+        Invitations reçues ({invites.length})
+      </p>
+      <ul className="space-y-2">
+        {invites.map((inv) => (
+          <li
+            key={inv.id}
+            className="flex flex-col gap-2 rounded-lg bg-surface-2 p-3 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <span className="min-w-0 text-sm">
+              <span className="font-medium">« {inv.name} »</span>
+              {inv.owner_name ? (
+                <span className="text-muted"> · invité par {inv.owner_name}</span>
+              ) : null}
+            </span>
+            <span className="flex shrink-0 gap-2">
+              <Button
+                type="button"
+                size="sm"
+                disabled={busy === inv.id}
+                onClick={() => void respond(inv.id, true)}
+              >
+                Rejoindre
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={busy === inv.id}
+                onClick={() => void respond(inv.id, false)}
+              >
+                Refuser
+              </Button>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }
 
@@ -138,7 +222,7 @@ function CreateGroupForm({
     try {
       const res = await apiCreateWorkspace({ data: { name: name.trim(), kind } });
       if (res.ok) {
-        toast.success(`Groupe « ${res.workspace.name} » créé. Code : ${res.workspace.code}`);
+        toast.success(`Groupe « ${res.workspace.name} » créé.`);
         setName("");
         await onDone();
       }
@@ -170,59 +254,6 @@ function CreateGroupForm({
     </form>
   );
 }
-
-function JoinGroupForm({
-  busy,
-  setBusy,
-  onDone,
-}: {
-  busy: boolean;
-  setBusy: (b: boolean) => void;
-  onDone: () => Promise<void>;
-}) {
-  const [code, setCode] = useState("");
-
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    try {
-      const res = await apiRequestJoin({ data: { code } });
-      if (res.ok === false) {
-        toast.error(res.reason === "unknown" ? "Code inconnu." : "Code invalide (6 caractères).");
-      } else if (res.status === "active") {
-        toast.success(`Vous êtes déjà membre de « ${res.workspaceName} ».`);
-      } else {
-        toast.success(`Demande envoyée à « ${res.workspaceName} » — en attente de validation.`);
-      }
-      setCode("");
-      await onDone();
-    } catch {
-      toast.error("Demande impossible.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <form className="space-y-2 border-t border-border pt-3" onSubmit={(e) => void submit(e)}>
-      <p className="text-xs font-medium tracking-wide text-accent">Rejoindre un groupe</p>
-      <Field label="Code du groupe">
-        <Input
-          value={code}
-          onChange={(e) => setCode(e.target.value.toUpperCase())}
-          maxLength={6}
-          className="font-mono tracking-widest"
-          placeholder="ABC234"
-          required
-        />
-      </Field>
-      <Button type="submit" size="sm" variant="secondary" disabled={busy}>
-        Envoyer la demande
-      </Button>
-    </form>
-  );
-}
-
 /** Vue côté demandeur tant que le propriétaire n'a pas validé. */
 function PendingCard({ group, onChange }: { group: Group; onChange: () => Promise<void> }) {
   const [busy, setBusy] = useState(false);
@@ -256,6 +287,7 @@ function PendingCard({ group, onChange }: { group: Group; onChange: () => Promis
 
 function GroupCard({ group, onChange }: { group: Group; onChange: () => Promise<void> }) {
   const [requests, setRequests] = useState<JoinRequest[]>([]);
+  const [sent, setSent] = useState<SentInvite[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -263,20 +295,18 @@ function GroupCard({ group, onChange }: { group: Group; onChange: () => Promise<
 
   const loadGroupData = useCallback(async () => {
     try {
-      // Tout membre actif voit la liste des membres ; seules les demandes en
-      // attente sont réservées au propriétaire.
-      const tasks: [Promise<unknown>, Promise<unknown>] = [
+      const [mb, rq, si] = await Promise.all([
         apiListMembers({ data: { workspaceId: group.id } }),
         group.isOwner
           ? apiListJoinRequests({ data: { workspaceId: group.id } })
           : Promise.resolve({ ok: false } as const),
-      ];
-      const [mb, rq] = (await Promise.all(tasks)) as [
-        Awaited<ReturnType<typeof apiListMembers>>,
-        Awaited<ReturnType<typeof apiListJoinRequests>>,
-      ];
+        group.isOwner
+          ? apiListSentInvites({ data: { workspaceId: group.id } })
+          : Promise.resolve({ ok: false } as const),
+      ]);
       if (mb.ok) setMembers(mb.members);
       if (rq.ok) setRequests(rq.requests);
+      if (si.ok) setSent(si.invites);
     } catch {
       /* ignore */
     }
@@ -339,6 +369,21 @@ function GroupCard({ group, onChange }: { group: Group; onChange: () => Promise<
     }
   }
 
+  async function revoke(userId: string) {
+    setBusy(true);
+    try {
+      const res = await apiRevokeInvite({ data: { workspaceId: group.id, targetUserId: userId } });
+      if (res.ok) {
+        toast.message("Invitation annulée.");
+        await loadGroupData();
+      } else {
+        toast.error("Action impossible.");
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <Card className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -348,74 +393,79 @@ function GroupCard({ group, onChange }: { group: Group; onChange: () => Promise<
         </span>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-sm tracking-widest">{group.code}</span>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => {
-            void navigator.clipboard.writeText(group.code);
-            toast.success("Code copié.");
-          }}
-        >
-          <Copy />
-          Copier le code
-        </Button>
-      </div>
-
       {group.isOwner ? (
-        <div className="space-y-2 border-t border-border pt-3">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-xs font-medium tracking-wide text-accent">
-              Demandes en attente ({requests.length})
-            </p>
-            <button
-              type="button"
-              className="inline-flex items-center gap-1 text-xs text-muted hover:text-fg"
-              onClick={() => void manualRefresh()}
-              disabled={refreshing}
-            >
-              <RefreshCw className={refreshing ? "size-3.5 animate-spin" : "size-3.5"} />
-              Rafraîchir
-            </button>
-          </div>
-          {requests.length === 0 ? (
-            <p className="text-sm text-muted">Aucune demande.</p>
-          ) : (
-            <ul className="space-y-2">
-              {requests.map((r) => (
-                <li
-                  key={r.user_id}
-                  className="flex flex-col gap-2 rounded-lg bg-surface-2 p-2 sm:flex-row sm:items-center sm:justify-between"
+        <div className="space-y-3 border-t border-border pt-3">
+          <InviteForm workspaceId={group.id} onDone={loadGroupData} />
+
+          {sent.length > 0 ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-medium tracking-wide text-accent">
+                  Invitations en attente ({sent.length})
+                </p>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 text-xs text-muted hover:text-fg"
+                  onClick={() => void manualRefresh()}
+                  disabled={refreshing}
                 >
-                  <span className="min-w-0 text-sm">
-                    <span className="font-medium">{r.name || "—"}</span>
-                    <span className="break-all text-muted"> · {r.email}</span>
-                  </span>
-                  <span className="flex shrink-0 gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={busy}
-                      onClick={() => void decide(r.user_id, true)}
-                    >
-                      Valider
-                    </Button>
+                  <RefreshCw className={refreshing ? "size-3.5 animate-spin" : "size-3.5"} />
+                  Rafraîchir
+                </button>
+              </div>
+              <ul className="space-y-2">
+                {sent.map((s) => (
+                  <li
+                    key={s.user_id}
+                    className="flex flex-col gap-2 rounded-lg bg-surface-2 p-2 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <span className="min-w-0 text-sm">
+                      <span className="font-medium">{s.name || "—"}</span>
+                      <span className="break-all text-muted"> · {s.email}</span>
+                    </span>
                     <Button
                       type="button"
                       size="sm"
                       variant="ghost"
                       disabled={busy}
-                      onClick={() => void decide(r.user_id, false)}
+                      onClick={() => void revoke(s.user_id)}
                     >
-                      Refuser
+                      Annuler
                     </Button>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {requests.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-xs font-medium tracking-wide text-accent">
+                Demandes reçues ({requests.length})
+              </p>
+              <ul className="space-y-2">
+                {requests.map((r) => (
+                  <li
+                    key={r.user_id}
+                    className="flex flex-col gap-2 rounded-lg bg-surface-2 p-2 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <span className="min-w-0 text-sm">
+                      <span className="font-medium">{r.name || "—"}</span>
+                      <span className="break-all text-muted"> · {r.email}</span>
+                    </span>
+                    <span className="flex shrink-0 gap-2">
+                      <Button type="button" size="sm" disabled={busy} onClick={() => void decide(r.user_id, true)}>
+                        Valider
+                      </Button>
+                      <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => void decide(r.user_id, false)}>
+                        Refuser
+                      </Button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -458,5 +508,68 @@ function GroupCard({ group, onChange }: { group: Group; onChange: () => Promise<
         Partage des dossiers du groupe entre membres validés : prochaine mise à jour.
       </p>
     </Card>
+  );
+}
+
+/** Champ « inviter un collègue par e-mail » (propriétaire). */
+function InviteForm({
+  workspaceId,
+  onDone,
+}: {
+  workspaceId: string;
+  onDone: () => Promise<void>;
+}) {
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    const to = email.trim().toLowerCase();
+    if (!EMAIL_RE.test(to)) {
+      toast.error("Adresse e-mail invalide.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await apiInviteMember({ data: { workspaceId, email: to } });
+      if (res.ok) {
+        toast.success(`Invitation envoyée à ${res.name || res.email}.`);
+        setEmail("");
+        await onDone();
+      } else {
+        toast.error(
+          res.reason === "unknown_user"
+            ? "Aucun compte SiprAssist avec cette adresse."
+            : res.reason === "already"
+              ? "Cette personne est déjà membre ou déjà invitée."
+              : res.reason === "self"
+                ? "C'est votre propre adresse."
+                : "Invitation impossible.",
+        );
+      }
+    } catch {
+      toast.error("Invitation impossible (réseau).");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="space-y-2" onSubmit={(e) => void submit(e)}>
+      <p className="text-xs font-medium tracking-wide text-accent">Inviter un collègue</p>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Input
+          type="email"
+          inputMode="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="prenom.nom@exemple.be"
+          className="sm:flex-1"
+        />
+        <Button type="submit" size="sm" disabled={busy}>
+          {busy ? "Envoi…" : "Inviter"}
+        </Button>
+      </div>
+    </form>
   );
 }

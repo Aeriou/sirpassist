@@ -93,9 +93,121 @@ export async function listMyWorkspaces(sql: Sql, userId: string) {
     select w.id, w.name, w.kind, w.join_code, w.owner_user_id, m.role, m.status
     from workspace w
     join workspace_member m on m.workspace_id = w.id
-    where m.user_id = ${userId} and m.status in ('active', 'pending')
+    where m.user_id = ${userId} and m.status in ('active', 'pending', 'invited')
     order by w.created_at
   `;
+}
+
+/** Résout un compte par e-mail (copie locale — module sans import de valeur). */
+async function userByEmail(
+  sql: Sql,
+  email: string,
+): Promise<{ id: string; name: string; email: string } | null> {
+  const clean = email.trim().toLowerCase();
+  if (!clean) return null;
+  const rows = await sql<{ id: string; name: string | null; email: string | null }>`
+    select id, name, email from "user" where lower(email) = ${clean} limit 1
+  `;
+  const r = rows[0];
+  return r ? { id: r.id, name: r.name ?? "", email: (r.email ?? "").toLowerCase() } : null;
+}
+
+/** Le propriétaire invite un compte (par e-mail) à rejoindre son groupe. */
+export async function inviteMember(
+  sql: Sql,
+  input: { workspaceId: string; byUserId: string; targetEmail: string },
+): Promise<
+  | { ok: false; reason: "forbidden" | "unknown_user" | "self" | "already" }
+  | { ok: true; name: string; email: string }
+> {
+  if (!(await isOwner(sql, input.workspaceId, input.byUserId))) {
+    return { ok: false, reason: "forbidden" };
+  }
+  const target = await userByEmail(sql, input.targetEmail);
+  if (!target) return { ok: false, reason: "unknown_user" };
+  if (target.id === input.byUserId) return { ok: false, reason: "self" };
+
+  const existing = await sql<{ status: string }>`
+    select status from workspace_member
+    where workspace_id = ${input.workspaceId} and user_id = ${target.id} limit 1
+  `;
+  if (existing[0]) return { ok: false, reason: "already" };
+
+  await sql`
+    insert into workspace_member (workspace_id, user_id, role, status, email, name)
+    values (${input.workspaceId}, ${target.id}, 'member', 'invited', ${target.email}, ${target.name})
+  `;
+  return { ok: true, name: target.name, email: target.email };
+}
+
+/** Invitations reçues par l'utilisateur (nom du groupe + qui invite). */
+export async function listMyInvites(sql: Sql, userId: string) {
+  return sql<{ id: string; name: string; kind: string; owner_name: string }>`
+    select w.id, w.name, w.kind,
+      coalesce((select om.name from workspace_member om
+        where om.workspace_id = w.id and om.role = 'owner' limit 1), '') as owner_name
+    from workspace w
+    join workspace_member m on m.workspace_id = w.id
+    where m.user_id = ${userId} and m.status = 'invited'
+    order by w.created_at
+  `;
+}
+
+/** Le destinataire accepte (devient membre actif) ou refuse (ligne supprimée). */
+export async function respondInvite(
+  sql: Sql,
+  input: { workspaceId: string; userId: string; accept: boolean },
+): Promise<{ ok: false; reason: "not_found" } | { ok: true; accepted: boolean }> {
+  const rows = await sql<CountRow>`
+    select count(*)::int as n from workspace_member
+    where workspace_id = ${input.workspaceId} and user_id = ${input.userId} and status = 'invited'
+  `;
+  if (!rows[0]?.n) return { ok: false, reason: "not_found" };
+  if (input.accept) {
+    await sql`
+      update workspace_member set status = 'active', decided_at = now()
+      where workspace_id = ${input.workspaceId} and user_id = ${input.userId} and status = 'invited'
+    `;
+  } else {
+    await sql`
+      delete from workspace_member
+      where workspace_id = ${input.workspaceId} and user_id = ${input.userId} and status = 'invited'
+    `;
+  }
+  return { ok: true, accepted: input.accept };
+}
+
+/** Invitations envoyées encore en attente (propriétaire). */
+export async function listSentInvites(
+  sql: Sql,
+  workspaceId: string,
+  byUserId: string,
+): Promise<
+  | { ok: false; reason: "forbidden" }
+  | { ok: true; invites: { user_id: string; email: string; name: string }[] }
+> {
+  if (!(await isOwner(sql, workspaceId, byUserId))) return { ok: false, reason: "forbidden" };
+  const invites = await sql<{ user_id: string; email: string; name: string }>`
+    select user_id, email, name from workspace_member
+    where workspace_id = ${workspaceId} and status = 'invited'
+    order by name
+  `;
+  return { ok: true, invites };
+}
+
+/** Le propriétaire retire une invitation non encore acceptée. */
+export async function revokeInvite(
+  sql: Sql,
+  input: { workspaceId: string; targetUserId: string; byUserId: string },
+): Promise<{ ok: false; reason: "forbidden" } | { ok: true }> {
+  if (!(await isOwner(sql, input.workspaceId, input.byUserId))) {
+    return { ok: false, reason: "forbidden" };
+  }
+  await sql`
+    delete from workspace_member
+    where workspace_id = ${input.workspaceId} and user_id = ${input.targetUserId} and status = 'invited'
+  `;
+  return { ok: true };
 }
 
 /** Annuler sa propre demande en attente (mauvais code, changement d'avis). */

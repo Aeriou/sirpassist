@@ -56,17 +56,22 @@ export const apiListWorkspaces = createServerFn({ method: "POST" })
     return {
       ok: true as const,
       workspaces: rows.map((w) => {
-        const pending = w.status !== "active";
+        const active = w.status === "active";
+        // Tant que ce n'est pas actif (invité OU ancienne demande), on ne
+        // renvoie que le nom : ni le code, ni le type, ni le rôle réel.
+        const status = active
+          ? ("active" as const)
+          : w.status === "invited"
+            ? ("invited" as const)
+            : ("pending" as const);
         return {
           id: w.id,
           name: w.name,
-          // Un membre en attente ne reçoit que le nom : ni le code, ni le type,
-          // ni le rôle réel tant que le propriétaire n'a pas validé.
-          kind: pending ? "" : w.kind,
-          code: pending ? "" : w.join_code,
-          role: !pending && w.role === "owner" ? ("owner" as const) : ("member" as const),
-          status: pending ? ("pending" as const) : ("active" as const),
-          isOwner: !pending && w.owner_user_id === context.userId,
+          kind: active ? w.kind : "",
+          code: active ? w.join_code : "",
+          role: active && w.role === "owner" ? ("owner" as const) : ("member" as const),
+          status,
+          isOwner: active && w.owner_user_id === context.userId,
         };
       }),
     };
@@ -173,4 +178,69 @@ export const apiPushWorkspace = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const sql = await getSqlClient();
     return wdb.pushWorkspaceData(sql, data.workspaceId, context.userId, data.snapshot);
+  });
+
+// ---------------------------------------------------------------------------
+// Invitation par e-mail (remplace le code à 6 caractères)
+// ---------------------------------------------------------------------------
+
+export const apiInviteMember = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { workspaceId: string; email: string }) => ({
+    workspaceId: vReqStr(input.workspaceId, 64),
+    email: vReqStr(input.email, 200).toLowerCase(),
+  }))
+  .handler(async ({ data, context }) => {
+    const sql = await getSqlClient();
+    return wdb.inviteMember(sql, {
+      workspaceId: data.workspaceId,
+      byUserId: context.userId,
+      targetEmail: data.email,
+    });
+  });
+
+export const apiListMyInvites = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const sql = await getSqlClient();
+    const invites = await wdb.listMyInvites(sql, context.userId);
+    return { ok: true as const, invites };
+  });
+
+export const apiRespondInvite = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { workspaceId: string; accept: boolean }) => ({
+    workspaceId: vReqStr(input.workspaceId, 64),
+    accept: vBool(input.accept),
+  }))
+  .handler(async ({ data, context }) => {
+    const sql = await getSqlClient();
+    return wdb.respondInvite(sql, {
+      workspaceId: data.workspaceId,
+      userId: context.userId,
+      accept: data.accept,
+    });
+  });
+
+export const apiListSentInvites = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { workspaceId: string }) => ({ workspaceId: vReqStr(input.workspaceId, 64) }))
+  .handler(async ({ data, context }) => {
+    const sql = await getSqlClient();
+    return wdb.listSentInvites(sql, data.workspaceId, context.userId);
+  });
+
+export const apiRevokeInvite = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { workspaceId: string; targetUserId: string }) => ({
+    workspaceId: vReqStr(input.workspaceId, 64),
+    targetUserId: vReqStr(input.targetUserId, 64),
+  }))
+  .handler(async ({ data, context }) => {
+    const sql = await getSqlClient();
+    return wdb.revokeInvite(sql, {
+      workspaceId: data.workspaceId,
+      targetUserId: data.targetUserId,
+      byUserId: context.userId,
+    });
   });

@@ -38,6 +38,12 @@ function makeSql(pg: PGlite) {
 const pg = new PGlite({ parsers: { 20: Number } });
 await pg.waitReady;
 pg.exec(readFileSync(join(root, "migrations/0003_workspace.sql"), "utf8"));
+pg.exec(`
+  create table if not exists "user" (
+    "id" text primary key, "name" text not null, "email" text not null unique,
+    "emailVerified" boolean not null default true
+  );
+`);
 const sql = makeSql(pg);
 
 const OWNER = "user_owner";
@@ -182,6 +188,66 @@ const refuse = await wdb.decideJoin(sql, {
 check("le propriétaire refuse une demande", refuse.ok === true);
 const afterRefuse = await wdb.myMembership(sql, created.id, STRANGER);
 check("la demande refusée est supprimée", afterRefuse.status === null);
+
+// --- invitation par e-mail ---
+await sql`insert into "user" (id, name, email) values (${OWNER}, 'Olivier', 'owner@ex.be')`;
+await sql`insert into "user" (id, name, email) values ('user_col', 'Colette', 'col@ex.be')`;
+
+const invFromStranger = await wdb.inviteMember(sql, {
+  workspaceId: created.id,
+  byUserId: STRANGER,
+  targetEmail: "col@ex.be",
+});
+check("un non-propriétaire ne peut pas inviter -> forbidden", invFromStranger.ok === false && invFromStranger.reason === "forbidden");
+
+const invUnknown = await wdb.inviteMember(sql, {
+  workspaceId: created.id,
+  byUserId: OWNER,
+  targetEmail: "personne@nulle.part",
+});
+check("invitation vers e-mail inconnu -> unknown_user", invUnknown.ok === false && invUnknown.reason === "unknown_user");
+
+const invSelf = await wdb.inviteMember(sql, {
+  workspaceId: created.id,
+  byUserId: OWNER,
+  targetEmail: "owner@ex.be",
+});
+check("invitation vers soi-même -> self", invSelf.ok === false && invSelf.reason === "self");
+
+const invOk = await wdb.inviteMember(sql, {
+  workspaceId: created.id,
+  byUserId: OWNER,
+  targetEmail: "  COL@ex.be ",
+});
+check("invitation valide (casse/espaces tolérés) -> ok", invOk.ok === true);
+
+const dupInv = await wdb.inviteMember(sql, {
+  workspaceId: created.id,
+  byUserId: OWNER,
+  targetEmail: "col@ex.be",
+});
+check("2e invitation même personne -> already", dupInv.ok === false && dupInv.reason === "already");
+
+const myInv = await wdb.listMyInvites(sql, "user_col");
+check(
+  "Colette voit 1 invitation (nom du groupe + invitant)",
+  myInv.length === 1 && myInv[0]!.name === "Groupe Test" && myInv[0]!.owner_name.length > 0,
+);
+
+const sent = await wdb.listSentInvites(sql, created.id, OWNER);
+check("le propriétaire voit 1 invitation envoyée", sent.ok === true && sent.ok && sent.invites.length === 1);
+
+const colStillNoData = await wdb.pullWorkspaceData(sql, created.id, "user_col");
+check("invité (pas encore accepté) -> pas d'accès aux données", colStillNoData.ok === false);
+
+const accept = await wdb.respondInvite(sql, { workspaceId: created.id, userId: "user_col", accept: true });
+check("Colette accepte -> membre actif", accept.ok === true && accept.ok && accept.accepted === true);
+check("après acceptation -> accès aux données", (await wdb.pullWorkspaceData(sql, created.id, "user_col")).ok === true);
+check("après acceptation -> plus dans les invitations envoyées", (await wdb.listSentInvites(sql, created.id, OWNER) as { ok: true; invites: unknown[] }).invites.length === 0);
+check("après acceptation -> boîte d'invitations vide", (await wdb.listMyInvites(sql, "user_col")).length === 0);
+
+const acceptTwice = await wdb.respondInvite(sql, { workspaceId: created.id, userId: "user_col", accept: true });
+check("on ne répond pas 2x à une invitation -> not_found", acceptTwice.ok === false);
 
 console.log(failures === 0 ? "\n✅ tous les contrôles passent" : `\n❌ ${failures} échec(s)`);
 process.exit(failures === 0 ? 0 : 1);
