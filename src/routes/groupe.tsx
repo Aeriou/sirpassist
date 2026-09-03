@@ -41,9 +41,9 @@ function GroupePage() {
       </header>
 
       <AccountPendingBanner />
-      <GroupSection />
       <MyClasseursShare />
       <GroupClasseursReceived />
+      <GroupSection />
     </div>
   );
 }

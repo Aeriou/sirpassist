@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Inbox, Send, Users } from "lucide-react";
 import { AuthPanel } from "@/components/auth-panel";
@@ -222,6 +222,15 @@ function PartagesPage() {
       </section>
 
       <GroupClasseursReceived />
+
+      <p className="rounded-xl bg-surface px-4 py-3 text-sm text-muted shadow-[var(--shadow-border)]">
+        Pour partager un <strong className="font-medium text-fg">classeur entier</strong> avec un
+        groupe (plusieurs visites d'un coup), passez par{" "}
+        <Link to="/groupe" className="text-accent">
+          Groupe → Partager un classeur
+        </Link>
+        .
+      </p>
 
       <section className="space-y-3">
         <h2 className="flex items-center gap-2 text-sm font-medium">

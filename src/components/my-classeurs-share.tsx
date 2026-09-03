@@ -17,17 +17,24 @@ export function MyClasseursShare() {
 
   return (
     <section className="space-y-3">
-      <h2 className="flex items-center gap-2 text-sm font-medium">
-        <Layers className="size-4 text-accent" />
-        Mes classeurs à partager{classeurs.length > 0 ? ` (${classeurs.length})` : ""}
-      </h2>
+      <div>
+        <h2 className="flex items-center gap-2 font-display text-lg font-semibold">
+          <Layers className="size-4 text-accent" />
+          Partager un classeur avec un groupe
+          {classeurs.length > 0 ? ` (${classeurs.length})` : ""}
+        </h2>
+        <p className="text-sm text-muted">
+          Dépliez un classeur pour le mettre en commun (lecture seule pour les membres). Le
+          contenu se met à jour tout seul ensuite.
+        </p>
+      </div>
       {classeurs.length === 0 ? (
         <p className="rounded-xl bg-surface px-4 py-3 text-sm text-muted shadow-[var(--shadow-border)]">
-          Aucun classeur. Créez-en un depuis l'
+          Aucun classeur pour l'instant. Créez-en un depuis l'
           <Link to="/" className="text-accent">
             Accueil
           </Link>{" "}
-          (bloc « Classeurs ») pour regrouper des visites et les partager d'un coup.
+          (bloc « Classeurs ») — il regroupe plusieurs visites et se partage d'un coup.
         </p>
       ) : (
         <ul className="space-y-2">
