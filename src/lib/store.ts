@@ -19,7 +19,6 @@ import type {
   SupportTicket,
   Visit,
   Workspace,
-  WorkspaceCloudSnapshot,
 } from "./types";
 import { emptyDeleted, mergeById, mergeDeleted, rememberIds } from "./cloud-sync";
 import type { SharePayloadV1 } from "./share-payload";
@@ -102,7 +101,6 @@ type State = {
   activatePro: (billing?: { stripeCustomerId?: string; stripeSubscriptionId?: string }) => void;
   activatePlan: (plan: "basic" | "pro", billing?: { stripeCustomerId?: string; stripeSubscriptionId?: string }) => void;
   patchSessionUser: (patch: Partial<SiprUser>) => void;
-  applyCloudSnapshot: (snap: WorkspaceCloudSnapshot) => void;
   applyUserSnapshot: (snap: UserSnapshot) => void;
   importSharedPayload: (
     payload: SharePayloadV1,
@@ -756,42 +754,6 @@ export const useSipr = create<State>()(
         });
       },
       activatePro: (billing) => get().activatePlan("pro", billing),
-      applyCloudSnapshot: (snap) => {
-        const ws = snap.workspace;
-        if (!ws?.id) return;
-        const { visits, anomalies, fds, rps, users, workspaces, pgpByWorkspace, deleted: localDeleted } = get();
-        const deleted = mergeDeleted(localDeleted, snap.deleted);
-        const nextWorkspaces = workspaces.some((w) => w.id === ws.id)
-          ? workspaces.map((w) => (w.id === ws.id ? { ...w, ...ws } : w))
-          : [...workspaces, ws];
-        const localPgp = pgpByWorkspace[ws.id];
-        const nextPgp: PgpPlan = localPgp
-          ? {
-              ...snap.pgp,
-              ...localPgp,
-              lines: mergeById(localPgp.lines, snap.pgp.lines, deleted.paa),
-              objectives: localPgp.objectives.length ? localPgp.objectives : snap.pgp.objectives,
-            }
-          : {
-              ...snap.pgp,
-              lines: snap.pgp.lines.filter((l) => !deleted.paa.includes(l.id)),
-            };
-        const nextUsers = [...users];
-        for (const u of snap.users) {
-          if (!nextUsers.some((x) => x.id === u.id || x.email === u.email)) nextUsers.push(u);
-        }
-        set({
-          workspaces: nextWorkspaces,
-          visits: mergeById(visits, snap.visits, deleted.visits),
-          anomalies: mergeById(anomalies, snap.anomalies, deleted.anomalies),
-          fds: mergeById(fds, snap.fds, deleted.fds),
-          rps: mergeById(rps, snap.rps ?? [], deleted.rps),
-          users: nextUsers,
-          pgpByWorkspace: { ...pgpByWorkspace, [ws.id]: nextPgp },
-          deleted,
-        });
-        get().switchWorkspace(ws.id);
-      },
       applyUserSnapshot: (snap) => {
         const s = get();
         set(

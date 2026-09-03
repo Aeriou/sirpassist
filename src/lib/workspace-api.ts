@@ -9,7 +9,6 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { vBool, vOneOf, vReqStr, vStr, vStrArr } from "@/lib/validate";
 import type { Sql } from "./db";
-import type { WorkspaceCloudSnapshot } from "./types";
 import * as wdb from "./workspace-db";
 
 async function getSqlClient(): Promise<Sql> {
@@ -160,32 +159,6 @@ export const apiMyMembership = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const sql = await getSqlClient();
     return wdb.myMembership(sql, data.workspaceId, context.userId);
-  });
-
-export const apiPullWorkspace = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .validator((input: { workspaceId: string }) => ({ workspaceId: vReqStr(input.workspaceId, 64) }))
-  .handler(
-    async ({
-      data,
-      context,
-    }): Promise<
-      | { ok: false; reason: "forbidden" }
-      | { ok: true; snapshot: WorkspaceCloudSnapshot | null }
-    > => {
-      const sql = await getSqlClient();
-      const res = await wdb.pullWorkspaceData(sql, data.workspaceId, context.userId);
-      if (!res.ok) return res;
-      return { ok: true, snapshot: (res.snapshot as WorkspaceCloudSnapshot | null) ?? null };
-    },
-  );
-
-export const apiPushWorkspace = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .validator((input: { workspaceId: string; snapshot: WorkspaceCloudSnapshot }) => ({ workspaceId: vReqStr(input.workspaceId, 64), snapshot: input.snapshot }))
-  .handler(async ({ data, context }) => {
-    const sql = await getSqlClient();
-    return wdb.pushWorkspaceData(sql, data.workspaceId, context.userId, data.snapshot);
   });
 
 // ---------------------------------------------------------------------------

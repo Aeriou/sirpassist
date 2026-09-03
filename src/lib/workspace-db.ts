@@ -383,30 +383,3 @@ export async function myMembership(
   };
 }
 
-export async function pullWorkspaceData(
-  sql: Sql,
-  workspaceId: string,
-  userId: string,
-): Promise<{ ok: false; reason: "forbidden" } | { ok: true; snapshot: unknown }> {
-  if (!(await isActiveMember(sql, workspaceId, userId))) return { ok: false, reason: "forbidden" };
-  const r = await sql<{ data: unknown }>`
-    select data from workspace_snapshot where workspace_id = ${workspaceId}
-  `;
-  return { ok: true, snapshot: r[0]?.data ?? null };
-}
-
-export async function pushWorkspaceData(
-  sql: Sql,
-  workspaceId: string,
-  userId: string,
-  data: unknown,
-): Promise<{ ok: false; reason: "forbidden" } | { ok: true }> {
-  if (!(await isActiveMember(sql, workspaceId, userId))) return { ok: false, reason: "forbidden" };
-  await sql`
-    insert into workspace_snapshot (workspace_id, data, updated_at, updated_by)
-    values (${workspaceId}, ${JSON.stringify(data ?? {})}::jsonb, now(), ${userId})
-    on conflict (workspace_id)
-    do update set data = excluded.data, updated_at = now(), updated_by = excluded.updated_by
-  `;
-  return { ok: true };
-}

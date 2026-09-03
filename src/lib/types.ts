@@ -345,15 +345,3 @@ export type DeletedIds = {
   classeurs: string[];
 };
 
-export type WorkspaceCloudSnapshot = {
-  v: 1;
-  savedAt: string;
-  workspace: Workspace;
-  visits: Visit[];
-  anomalies: Anomaly[];
-  fds: FdsNotice[];
-  rps: RpsSituation[];
-  pgp: PgpPlan;
-  users: SiprUser[];
-  deleted?: DeletedIds;
-};

@@ -106,9 +106,8 @@ await wdb.requestJoin(sql, {
 });
 check("re-demande possible après annulation", (await wdb.myMembership(sql, created.id, JOINER)).status === "pending");
 
-// --- le pending NE PEUT PAS lire les données ---
-const pullPending = await wdb.pullWorkspaceData(sql, created.id, JOINER);
-check("membre en attente -> pas d'accès aux données", pullPending.ok === false && pullPending.reason === "forbidden");
+// --- le pending n'est PAS un membre actif ---
+check("membre en attente -> statut 'pending', pas d'accès", (await wdb.myMembership(sql, created.id, JOINER)).status === "pending");
 
 // --- validation réservée au propriétaire ---
 const reqAsJoiner = await wdb.listJoinRequests(sql, created.id, JOINER);
@@ -141,20 +140,8 @@ check("le propriétaire valide la demande", approve.ok === true);
 const membership = await wdb.myMembership(sql, created.id, JOINER);
 check("le demandeur est maintenant actif", membership.status === "active" && membership.role === "member");
 
-// --- membre actif : lecture/écriture OK ---
-const push = await wdb.pushWorkspaceData(sql, created.id, JOINER, { v: 1, hello: "monde" });
-check("membre actif -> push OK", push.ok === true);
-
-const pullActive = await wdb.pullWorkspaceData(sql, created.id, JOINER);
-check(
-  "membre actif -> pull renvoie le snapshot",
-  pullActive.ok === true &&
-    JSON.stringify((pullActive as { snapshot: unknown }).snapshot) === JSON.stringify({ v: 1, hello: "monde" }),
-);
-
-// --- étranger : rien ---
-const pullStranger = await wdb.pullWorkspaceData(sql, created.id, STRANGER);
-check("un étranger (jamais demandé) -> pas d'accès", pullStranger.ok === false);
+// --- étranger : aucune appartenance ---
+check("un étranger (jamais demandé) -> pas d'appartenance", (await wdb.myMembership(sql, created.id, STRANGER)).status === null);
 
 // --- retrait de membre ---
 const removeOwner = await wdb.removeMember(sql, {
@@ -173,9 +160,6 @@ check("le propriétaire retire un membre", removeJoiner.ok === true);
 
 const afterRemove = await wdb.myMembership(sql, created.id, JOINER);
 check("le membre retiré n'a plus de statut", afterRemove.status === null);
-
-const pullAfterRemove = await wdb.pullWorkspaceData(sql, created.id, JOINER);
-check("le membre retiré n'accède plus aux données", pullAfterRemove.ok === false);
 
 // --- refus d'une demande ---
 await wdb.requestJoin(sql, { userId: STRANGER, email: "s@x", name: "S", code: created.code });
@@ -237,12 +221,11 @@ check(
 const sent = await wdb.listSentInvites(sql, created.id, OWNER);
 check("le propriétaire voit 1 invitation envoyée", sent.ok === true && sent.ok && sent.invites.length === 1);
 
-const colStillNoData = await wdb.pullWorkspaceData(sql, created.id, "user_col");
-check("invité (pas encore accepté) -> pas d'accès aux données", colStillNoData.ok === false);
+check("invité (pas encore accepté) -> pas encore membre actif", (await wdb.myMembership(sql, created.id, "user_col")).status !== "active");
 
 const accept = await wdb.respondInvite(sql, { workspaceId: created.id, userId: "user_col", accept: true });
 check("Colette accepte -> membre actif", accept.ok === true && accept.ok && accept.accepted === true);
-check("après acceptation -> accès aux données", (await wdb.pullWorkspaceData(sql, created.id, "user_col")).ok === true);
+check("après acceptation -> membre actif", (await wdb.myMembership(sql, created.id, "user_col")).status === "active");
 check("après acceptation -> plus dans les invitations envoyées", (await wdb.listSentInvites(sql, created.id, OWNER) as { ok: true; invites: unknown[] }).invites.length === 0);
 check("après acceptation -> boîte d'invitations vide", (await wdb.listMyInvites(sql, "user_col")).length === 0);
 
