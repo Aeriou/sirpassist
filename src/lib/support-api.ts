@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
+import { hitRateLimit } from "./rate-limit";
 import { isOwnerEmail } from "./plan-server";
 import { formatGrokPrompt } from "./support";
 import type { Sql } from "./db";
@@ -104,6 +105,15 @@ export const submitSupportTicket = createServerFn({ method: "POST" })
       return { ok: false, error: "Type de demande inconnu." };
     }
     const sql = await getSqlClient();
+    const rl = await hitRateLimit(sql, {
+      bucket: "support:submit",
+      subject: context.userId,
+      limit: 8,
+      windowSec: 3600,
+    });
+    if (!rl.ok) {
+      return { ok: false, error: "Trop de demandes d'affilée — réessayez plus tard." };
+    }
     const email = await emailOf(sql, context.userId);
     const photos = clipPhotos(data.photos);
     const id = `sup_${crypto.randomUUID().slice(0, 8)}`;

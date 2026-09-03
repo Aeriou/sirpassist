@@ -128,7 +128,11 @@ export function ShareButton({
                 ? "Votre compte est en attente de validation — le partage sera possible ensuite."
                 : res.reason === "target_pending"
                   ? "Ce compte n'est pas encore validé par l'administrateur."
-                  : "Envoi impossible.",
+                  : res.reason === "too_large"
+                    ? "Dossier trop lourd à partager (trop de photos). Partagez constat par constat."
+                    : res.reason === "rate_limited"
+                      ? "Trop de partages d'affilée — réessayez dans un moment."
+                      : "Envoi impossible.",
         );
         return;
       }

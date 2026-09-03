@@ -1,6 +1,25 @@
 import { createServerFn } from "@tanstack/react-start";
 import { formatCoords, isoDate } from "./format";
+import { hitRateLimit, clientIpFrom } from "./rate-limit";
 import { inBelgium, isBelgianPostcode } from "./place";
+
+/** Limite le proxy géo public, par IP (évite qu'on épuise le quota Nominatim). */
+async function geoRateOk(): Promise<boolean> {
+  try {
+    const { getRequest } = await import("@tanstack/react-start/server");
+    const { getSql } = await import("./db");
+    const ip = clientIpFrom(getRequest()?.headers);
+    const r = await hitRateLimit(await getSql(), {
+      bucket: "geo:lookup",
+      subject: `ip:${ip}`,
+      limit: 80,
+      windowSec: 3600,
+    });
+    return r.ok;
+  } catch {
+    return true;
+  }
+}
 import type { GeoFix, Place } from "./types";
 import { emptyPlace } from "./place";
 
@@ -144,6 +163,9 @@ export const reverseGeocode = createServerFn({ method: "POST" })
     if (!inBelgium(data.lat, data.lng)) {
       return { ok: false, error: "Point hors Belgique." };
     }
+    if (!(await geoRateOk())) {
+      return { ok: false, error: "Trop de requêtes d'adresse — patientez un instant." };
+    }
     let unreachable = 0;
 
     try {
@@ -179,6 +201,9 @@ export const searchBelgianAddress = createServerFn({ method: "POST" })
     if (q.length < 5) return { ok: true, hits: [] };
     const fakePc = q.match(/\b(\d{5,})\b/);
     if (fakePc) return { ok: true, hits: [] };
+    if (!(await geoRateOk())) {
+      return { ok: false, error: "Trop de recherches d'adresse — patientez un instant." };
+    }
 
     let hits: Place[] = [];
     let unreachable = 0;

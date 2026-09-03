@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
+import { hitRateLimit } from "./rate-limit";
 import { buildKinney, nearestOption, PROBABILITY, EXPOSURE, GRAVITY } from "./kinney";
 import { THEMES, type ThemeId } from "./code-bien-etre";
 import type { AnomalyDraft } from "./parse-observation";
@@ -32,6 +33,22 @@ type AnalyzeFdsInput = {
  *  fournisseur IA qui irait la chercher). */
 function safePhoto(photo?: string): string | undefined {
   return typeof photo === "string" && photo.startsWith("data:image/") ? photo : undefined;
+}
+
+/** Limite les appels IA (coût tokens). true = autorisé. */
+async function aiRateOk(userId: string): Promise<boolean> {
+  try {
+    const { getSql } = await import("@/lib/db");
+    const r = await hitRateLimit(await getSql(), {
+      bucket: "ai:analyze",
+      subject: userId,
+      limit: 60,
+      windowSec: 3600,
+    });
+    return r.ok;
+  } catch {
+    return true; // base indisponible : ne pas bloquer l'analyse
+  }
 }
 
 function extractJson(text: string): unknown {
@@ -90,9 +107,13 @@ function asGhs(list: unknown): GhsCode[] {
 export const analyzeAnomaly = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((input: AnalyzeAnomalyInput) => input)
-  .handler(async ({ data }): Promise<{ ok: true; draft: AnomalyDraft; source: "ai" | "local" } | { ok: false; error: string }> => {
+  .handler(async ({ data, context }): Promise<{ ok: true; draft: AnomalyDraft; source: "ai" | "local" } | { ok: false; error: string }> => {
     const photo = safePhoto(data.photo);
     const fallback = parseObservation(data.transcription);
+    if (!(await aiRateOk(context.userId))) {
+      // Trop d'appels : on rend l'analyse locale plutôt qu'une erreur.
+      return { ok: true, draft: fallback, source: "local" };
+    }
     const content: unknown[] = [
       {
         type: "text",
@@ -173,13 +194,16 @@ Observation: ${data.transcription || "(photo seule)"}`,
 export const analyzeFds = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((input: AnalyzeFdsInput) => input)
-  .handler(async ({ data }): Promise<
+  .handler(async ({ data, context }): Promise<
     | { ok: true; notice: Omit<FdsNotice, "id" | "createdAt" | "workspaceId">; source: "ai" | "local" }
     | { ok: false; error: string }
   > => {
     const photo = safePhoto(data.photo);
     if (!photo) {
       return { ok: false, error: "Photo d'étiquette invalide." };
+    }
+    if (!(await aiRateOk(context.userId))) {
+      return { ok: false, error: "Trop d'analyses d'affilée — réessayez dans un moment." };
     }
     const parsed = await grokJson(
       [

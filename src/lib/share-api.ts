@@ -7,9 +7,12 @@
  */
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
+import { hitRateLimit } from "./rate-limit";
 import type { Sql } from "./db";
 import * as sdb from "./share-db";
 import type { SharePayloadV1 } from "./share-payload";
+
+const MAX_PAYLOAD_BYTES = 8_000_000; // ~8 Mo de JSON (photos comprises)
 
 async function getSqlClient(): Promise<Sql> {
   const { getSql } = await import("@/lib/db");
@@ -38,6 +41,18 @@ export const apiSendShare = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const sql = await getSqlClient();
+    const rl = await hitRateLimit(sql, {
+      bucket: "share:send",
+      subject: context.userId,
+      limit: 30,
+      windowSec: 3600,
+    });
+    if (!rl.ok) {
+      return { ok: false as const, reason: "rate_limited" as const, retryAfter: rl.retryAfter };
+    }
+    if (JSON.stringify(data.payload ?? {}).length > MAX_PAYLOAD_BYTES) {
+      return { ok: false as const, reason: "too_large" as const };
+    }
     const me = await currentUser(sql, context.userId);
     return sdb.sendOffer(sql, {
       fromUserId: context.userId,

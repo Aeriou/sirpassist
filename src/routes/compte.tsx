@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Copy } from "lucide-react";
 import { toast } from "sonner";
 import { AuthPanel } from "@/components/auth-panel";
 import { doSignOut } from "@/lib/auth/sign-out";
@@ -221,23 +220,7 @@ function WorkspaceCard({
         <p className="rounded-lg bg-warn/15 px-3 py-2 text-sm text-warn">
           Espace démo — créez un compte pour un PGP dédié.
         </p>
-      ) : (
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="font-mono text-sm tracking-widest">{workspace.code}</p>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              void navigator.clipboard.writeText(workspace.code);
-              toast.success("Code copié.");
-            }}
-          >
-            <Copy />
-            Copier le code
-          </Button>
-        </div>
-      )}
+      ) : null}
     </Card>
   );
 }

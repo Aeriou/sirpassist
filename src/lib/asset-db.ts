@@ -35,6 +35,17 @@ export async function listAssetIds(sql: Sql, userId: string): Promise<string[]> 
   return rows.map((r) => r.asset_id);
 }
 
+export async function assetStats(
+  sql: Sql,
+  userId: string,
+): Promise<{ count: number; bytes: number }> {
+  const rows = await sql<{ n: number; total: number }>`
+    select count(*)::int as n, coalesce(sum(bytes), 0)::bigint as total
+    from user_asset where user_id = ${userId}
+  `;
+  return { count: rows[0]?.n ?? 0, bytes: Number(rows[0]?.total ?? 0) };
+}
+
 /** Ménage : supprime les images qu'aucun dossier ne référence plus. */
 export async function deleteAssetsExcept(
   sql: Sql,
