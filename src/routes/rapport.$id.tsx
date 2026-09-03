@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Mail } from "lucide-react";
 import { RiskBadge, StatusBadge, ThemeChip } from "@/components/risk-badge";
+import { Photo } from "@/components/photo";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { formatCoords, formatDate, formatShortDate, formatStamp } from "@/lib/format";
@@ -109,9 +110,11 @@ function Rapport() {
                 {a.title}
               </Link>
             </h2>
-            {a.photo ? (
-              <img src={a.photo} alt="" className="h-40 w-full rounded-lg object-cover" />
-            ) : null}
+            <Photo
+              dataUrl={a.photo}
+              assetId={a.photoAssetId}
+              className="h-40 w-full rounded-lg object-cover"
+            />
             <p className="text-sm">{a.description}</p>
             {a.voice ? (
               <p className="text-xs text-muted">

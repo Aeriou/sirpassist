@@ -1,17 +1,28 @@
 import { formatCoords } from "./format";
 import type { GeoFix } from "./types";
 
+// Une photo de constat sert à COMPRENDRE le dossier, pas à archiver en haute
+// définition : on plafonne la largeur et on encode en JPEG léger. ~80–200 Ko
+// au lieu de plusieurs Mo — ça allège le cache local ET la synchro serveur.
+export const PHOTO_MAX_W = 1280;
+export const PHOTO_QUALITY = 0.7;
+
 export async function stampPhoto(
   dataUrl: string,
-  meta: { time: string; geo?: GeoFix },
+  meta: { time: string; geo?: GeoFix; maxW?: number; quality?: number },
 ): Promise<string> {
+  const maxW = meta.maxW ?? PHOTO_MAX_W;
+  const quality = meta.quality ?? PHOTO_QUALITY;
   const img = await loadImage(dataUrl);
+  const srcW = img.naturalWidth || img.width || 1;
+  const srcH = img.naturalHeight || img.height || 1;
+  const scale = Math.min(1, maxW / Math.max(srcW, srcH));
   const canvas = document.createElement("canvas");
-  canvas.width = img.naturalWidth || img.width;
-  canvas.height = img.naturalHeight || img.height;
+  canvas.width = Math.max(1, Math.round(srcW * scale));
+  canvas.height = Math.max(1, Math.round(srcH * scale));
   const ctx = canvas.getContext("2d");
   if (!ctx) return dataUrl;
-  ctx.drawImage(img, 0, 0);
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
   const h = canvas.height;
   const w = canvas.width;
   const bar = Math.max(48, Math.round(h * 0.11));
@@ -37,7 +48,7 @@ export async function stampPhoto(
   const mark = "SiprAssist · preuve CBE";
   const mw = ctx.measureText(mark).width;
   ctx.fillText(mark, w - pad - mw, h - bar + 8);
-  return canvas.toDataURL("image/jpeg", 0.82);
+  return canvas.toDataURL("image/jpeg", quality);
 }
 
 function clip(ctx: CanvasRenderingContext2D, text: string, max: number) {

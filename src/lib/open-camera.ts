@@ -60,5 +60,7 @@ export function captureFrame(video: HTMLVideoElement): string {
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Canvas indisponible");
   ctx.drawImage(video, 0, 0, w, h);
-  return canvas.toDataURL("image/jpeg", 0.82);
+  // Frame intermédiaire peu compressée : c'est `stampPhoto` qui redimensionne
+  // et encode la version finale légère.
+  return canvas.toDataURL("image/jpeg", 0.92);
 }

@@ -92,6 +92,7 @@ export async function purgeUserData(sql: Sql, userId: string): Promise<void> {
   await sql`delete from workspace_member where user_id = ${userId}`;
   await sql`delete from share_offer where from_user_id = ${userId} or to_user_id = ${userId}`;
   await sql`delete from user_store where user_id = ${userId}`;
+  await sql`delete from user_asset where user_id = ${userId}`;
   await sql`delete from sipr_billing where user_id = ${userId}`;
   await sql`delete from account_approval where user_id = ${userId}`;
 }

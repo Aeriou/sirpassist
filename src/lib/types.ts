@@ -130,6 +130,8 @@ export type Visit = {
   date: string;
   status: VisitStatus;
   coverPhoto?: string;
+  /** Photo de couverture sur le serveur (voir user_asset). */
+  coverPhotoAssetId?: string;
   notes?: string;
   geo?: GeoFix;
   place?: Place;
@@ -150,6 +152,9 @@ export type Anomaly = {
   id: string;
   visitId: string;
   photo?: string;
+  /** Photo du constat sur le serveur (voir user_asset). Le champ `photo` reste
+   *  la copie locale, éventuellement absente sur un autre appareil. */
+  photoAssetId?: string;
   title: string;
   location: string;
   description: string;

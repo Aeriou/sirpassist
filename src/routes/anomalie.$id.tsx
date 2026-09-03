@@ -5,6 +5,7 @@ import { ConfirmDelete } from "@/components/confirm-delete";
 import { KinneyCalculator } from "@/components/kinney-calculator";
 import { ShareButton } from "@/components/share-button";
 import { ShareNotes } from "@/components/share-notes";
+import { Photo } from "@/components/photo";
 import { RiskBadge, StatusBadge, ThemeChip, UrgencyBadge } from "@/components/risk-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -38,13 +39,11 @@ function AnomalyPage() {
 
   return (
     <div className="space-y-5">
-      {anomaly.photo ? (
-        <img
-          src={anomaly.photo}
-          alt=""
-          className="h-56 w-full rounded-2xl object-cover md:h-72"
-        />
-      ) : null}
+      <Photo
+        dataUrl={anomaly.photo}
+        assetId={anomaly.photoAssetId}
+        className="h-56 w-full rounded-2xl object-cover md:h-72"
+      />
 
       <header className="space-y-2">
         <div className="flex flex-wrap gap-1.5">

@@ -49,6 +49,7 @@ for (const m of [
   "0006_share.sql",
   "0007_user_store.sql",
   "0008_account_approval.sql",
+  "0009_user_asset.sql",
 ]) {
   pg.exec(readFileSync(join(root, "migrations", m), "utf8"));
 }
@@ -104,6 +105,7 @@ await sql`insert into workspace_member (workspace_id, user_id, role, status) val
 await sql`insert into workspace_member (workspace_id, user_id, role, status) values ('ws_keep', ${D}, 'member', 'active')`;
 await sql`insert into share_offer (id, thread_id, from_user_id, to_user_id, kind, payload) values ('shr_del', 'thr', ${D}, 'user_other', 'visit', '{}'::jsonb)`;
 await sql`insert into user_store (user_id, data, rev) values (${D}, '{}'::jsonb, 3)`;
+await sql`insert into user_asset (user_id, asset_id, mime, data, bytes) values (${D}, 'a1', 'image/jpeg', 'data:x', 6)`;
 await sql`insert into sipr_billing (user_id, plan) values (${D}, 'trial')`;
 await adb.ensureApprovalRow(sql, { userId: D, email: "del@example.com", name: "Del", autoApprove: true });
 
@@ -115,6 +117,7 @@ check("purge : workspace_snapshot supprimé", await gone(sql`select 1 from works
 check("purge : ses appartenances supprimées", await gone(sql`select 1 from workspace_member where user_id = ${D}`));
 check("purge : partages (émis ou reçus) supprimés", await gone(sql`select 1 from share_offer where from_user_id = ${D} or to_user_id = ${D}`));
 check("purge : user_store supprimé", await gone(sql`select 1 from user_store where user_id = ${D}`));
+check("purge : user_asset supprimé", await gone(sql`select 1 from user_asset where user_id = ${D}`));
 check("purge : sipr_billing supprimé", await gone(sql`select 1 from sipr_billing where user_id = ${D}`));
 check("purge : account_approval supprimé", await gone(sql`select 1 from account_approval where user_id = ${D}`));
 check(

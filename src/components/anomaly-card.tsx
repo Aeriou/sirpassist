@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { MapPin } from "lucide-react";
 import type { Anomaly } from "@/lib/types";
+import { Photo } from "./photo";
 import { RiskBadge, StatusBadge, ThemeChip } from "./risk-badge";
 
 export function AnomalyCard({ anomaly }: { anomaly: Anomaly }) {
@@ -10,9 +11,11 @@ export function AnomalyCard({ anomaly }: { anomaly: Anomaly }) {
       params={{ id: anomaly.id }}
       className="block overflow-hidden rounded-2xl bg-surface shadow-[var(--shadow-border)] transition-[box-shadow] duration-150 hover:shadow-[var(--shadow-border-hover)]"
     >
-      {anomaly.photo ? (
-        <img src={anomaly.photo} alt="" className="h-36 w-full object-cover" />
-      ) : null}
+      <Photo
+        dataUrl={anomaly.photo}
+        assetId={anomaly.photoAssetId}
+        className="h-36 w-full object-cover"
+      />
       <div className="space-y-2 p-4">
         <div className="flex flex-wrap items-center gap-1.5">
           <RiskBadge level={anomaly.kinney.level} score={anomaly.kinney.score} />

@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { authClient } from "@/lib/auth/client";
 import { apiPullUserStore, apiPushUserStore } from "@/lib/user-store-api";
+import { apiListAssetIds, apiPutAsset } from "@/lib/asset-api";
+import { assetIdOf, isDataUrl } from "@/lib/asset-id";
+import { primeAsset } from "@/lib/asset-cache";
 import { buildUserSnapshot, snapshotKey } from "@/lib/user-snapshot";
 import { useOnline } from "@/lib/online";
 import { useSipr } from "@/lib/store";
@@ -26,6 +29,7 @@ export function UserStoreHost() {
   const lastKey = useRef("");
   const timer = useRef<number>(0);
   const pushing = useRef(false);
+  const serverAssetIds = useRef<Set<string> | null>(null);
 
   useEffect(() => {
     if (hydrated) return;
@@ -42,6 +46,7 @@ export function UserStoreHost() {
       setPulledFor(null);
       rev.current = 0;
       lastKey.current = "";
+      serverAssetIds.current = null;
       return;
     }
     let cancelled = false;
@@ -88,8 +93,50 @@ export function UserStoreHost() {
   useEffect(() => {
     if (!userId || pulledFor !== userId) return;
 
+    // Rapproche les photos avec le magasin d'images serveur : hash du contenu →
+    // `photoAssetId` écrit dans le store, octets téléversés une seule fois.
+    // Le blob `user_store` ne transporte QUE les ids (voir buildUserSnapshot).
+    const reconcilePhotos = async () => {
+      if (!online) return;
+      const withPhoto = useSipr
+        .getState()
+        .anomalies.filter((a) => isDataUrl(a.photo));
+      if (withPhoto.length === 0) return;
+
+      const need: { id: string; data: string }[] = [];
+      for (const a of withPhoto) {
+        let id = a.photoAssetId;
+        if (!id) {
+          id = await assetIdOf(a.photo as string);
+          useSipr.getState().updateAnomaly(a.id, { photoAssetId: id });
+        }
+        primeAsset(id, a.photo);
+        need.push({ id, data: a.photo as string });
+      }
+
+      let known = serverAssetIds.current;
+      if (!known) {
+        try {
+          known = new Set((await apiListAssetIds()).ids);
+          serverAssetIds.current = known;
+        } catch {
+          return; // réessai au prochain flush
+        }
+      }
+      for (const { id, data } of need) {
+        if (known.has(id)) continue;
+        try {
+          const r = await apiPutAsset({ data: { assetId: id, mime: "image/jpeg", data } });
+          if (r.ok) known.add(id);
+        } catch {
+          /* réseau : réessai au prochain flush */
+        }
+      }
+    };
+
     const flush = async () => {
       if (pushing.current || !online) return;
+      await reconcilePhotos();
       const snap = buildUserSnapshot(useSipr.getState());
       const key = snapshotKey(snap);
       if (key === lastKey.current) return;

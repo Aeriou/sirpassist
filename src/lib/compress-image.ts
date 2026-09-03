@@ -1,7 +1,9 @@
+import { PHOTO_MAX_W, PHOTO_QUALITY } from "./stamp-photo";
+
 export async function compressImage(
   source: File | Blob,
-  maxW = 1280,
-  quality = 0.72,
+  maxW = PHOTO_MAX_W,
+  quality = PHOTO_QUALITY,
 ): Promise<string> {
   const drawn = await drawToCanvas(source, maxW);
   return drawn.toDataURL("image/jpeg", quality);
