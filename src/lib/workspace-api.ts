@@ -7,6 +7,7 @@
  */
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
+import { vBool, vOneOf, vReqStr, vStr, vStrArr } from "@/lib/validate";
 import type { Sql } from "./db";
 import type { WorkspaceCloudSnapshot } from "./types";
 import * as wdb from "./workspace-db";
@@ -33,7 +34,7 @@ async function currentUser(
 
 export const apiCreateWorkspace = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { name: string; kind: "entreprise" | "independant" }) => input)
+  .validator((input: { name: string; kind: "entreprise" | "independant" }) => ({ name: vStr(input.name, 120), kind: vOneOf(input.kind, ["entreprise", "independant"] as const, "entreprise") }))
   .handler(async ({ data, context }) => {
     const sql = await getSqlClient();
     const { email, name } = await currentUser(sql, context.userId);
@@ -73,7 +74,7 @@ export const apiListWorkspaces = createServerFn({ method: "POST" })
 
 export const apiCancelJoinRequest = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { workspaceId: string }) => input)
+  .validator((input: { workspaceId: string }) => ({ workspaceId: vReqStr(input.workspaceId, 64) }))
   .handler(async ({ data, context }) => {
     const sql = await getSqlClient();
     return wdb.cancelJoinRequest(sql, data.workspaceId, context.userId);
@@ -81,7 +82,7 @@ export const apiCancelJoinRequest = createServerFn({ method: "POST" })
 
 export const apiRequestJoin = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { code: string }) => input)
+  .validator((input: { code: string }) => ({ code: vStr(input.code, 16) }))
   .handler(async ({ data, context }) => {
     const sql = await getSqlClient();
     const { email, name } = await currentUser(sql, context.userId);
@@ -90,7 +91,7 @@ export const apiRequestJoin = createServerFn({ method: "POST" })
 
 export const apiListJoinRequests = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { workspaceId: string }) => input)
+  .validator((input: { workspaceId: string }) => ({ workspaceId: vReqStr(input.workspaceId, 64) }))
   .handler(async ({ data, context }) => {
     const sql = await getSqlClient();
     return wdb.listJoinRequests(sql, data.workspaceId, context.userId);
@@ -98,7 +99,7 @@ export const apiListJoinRequests = createServerFn({ method: "POST" })
 
 export const apiDecideJoin = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { workspaceId: string; targetUserId: string; approve: boolean }) => input)
+  .validator((input: { workspaceId: string; targetUserId: string; approve: boolean }) => ({ workspaceId: vReqStr(input.workspaceId, 64), targetUserId: vReqStr(input.targetUserId, 64), approve: vBool(input.approve) }))
   .handler(async ({ data, context }) => {
     const sql = await getSqlClient();
     return wdb.decideJoin(sql, {
@@ -111,7 +112,7 @@ export const apiDecideJoin = createServerFn({ method: "POST" })
 
 export const apiListMembers = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { workspaceId: string }) => input)
+  .validator((input: { workspaceId: string }) => ({ workspaceId: vReqStr(input.workspaceId, 64) }))
   .handler(async ({ data, context }) => {
     const sql = await getSqlClient();
     const res = await wdb.listMembers(sql, data.workspaceId, context.userId);
@@ -130,7 +131,7 @@ export const apiListMembers = createServerFn({ method: "POST" })
 
 export const apiRemoveMember = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { workspaceId: string; targetUserId: string }) => input)
+  .validator((input: { workspaceId: string; targetUserId: string }) => ({ workspaceId: vReqStr(input.workspaceId, 64), targetUserId: vReqStr(input.targetUserId, 64) }))
   .handler(async ({ data, context }) => {
     const sql = await getSqlClient();
     return wdb.removeMember(sql, {
@@ -142,7 +143,7 @@ export const apiRemoveMember = createServerFn({ method: "POST" })
 
 export const apiMyMembership = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { workspaceId: string }) => input)
+  .validator((input: { workspaceId: string }) => ({ workspaceId: vReqStr(input.workspaceId, 64) }))
   .handler(async ({ data, context }) => {
     const sql = await getSqlClient();
     return wdb.myMembership(sql, data.workspaceId, context.userId);
@@ -150,7 +151,7 @@ export const apiMyMembership = createServerFn({ method: "POST" })
 
 export const apiPullWorkspace = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { workspaceId: string }) => input)
+  .validator((input: { workspaceId: string }) => ({ workspaceId: vReqStr(input.workspaceId, 64) }))
   .handler(
     async ({
       data,
@@ -168,7 +169,7 @@ export const apiPullWorkspace = createServerFn({ method: "POST" })
 
 export const apiPushWorkspace = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { workspaceId: string; snapshot: WorkspaceCloudSnapshot }) => input)
+  .validator((input: { workspaceId: string; snapshot: WorkspaceCloudSnapshot }) => ({ workspaceId: vReqStr(input.workspaceId, 64), snapshot: input.snapshot }))
   .handler(async ({ data, context }) => {
     const sql = await getSqlClient();
     return wdb.pushWorkspaceData(sql, data.workspaceId, context.userId, data.snapshot);

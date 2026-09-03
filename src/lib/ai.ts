@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { hitRateLimit } from "./rate-limit";
+import { vStr } from "./validate";
 import { buildKinney, nearestOption, PROBABILITY, EXPOSURE, GRAVITY } from "./kinney";
 import { THEMES, type ThemeId } from "./code-bien-etre";
 import type { AnomalyDraft } from "./parse-observation";
@@ -106,7 +107,10 @@ function asGhs(list: unknown): GhsCode[] {
 
 export const analyzeAnomaly = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: AnalyzeAnomalyInput) => input)
+  .validator((input: AnalyzeAnomalyInput) => ({
+    transcription: vStr(input.transcription, 20_000),
+    photo: typeof input.photo === "string" ? input.photo.slice(0, 4_000_000) : undefined,
+  }))
   .handler(async ({ data, context }): Promise<{ ok: true; draft: AnomalyDraft; source: "ai" | "local" } | { ok: false; error: string }> => {
     const photo = safePhoto(data.photo);
     const fallback = parseObservation(data.transcription);
@@ -193,7 +197,9 @@ Observation: ${data.transcription || "(photo seule)"}`,
 
 export const analyzeFds = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: AnalyzeFdsInput) => input)
+  .validator((input: AnalyzeFdsInput) => ({
+    photo: typeof input.photo === "string" ? input.photo.slice(0, 4_000_000) : "",
+  }))
   .handler(async ({ data, context }): Promise<
     | { ok: true; notice: Omit<FdsNotice, "id" | "createdAt" | "workspaceId">; source: "ai" | "local" }
     | { ok: false; error: string }

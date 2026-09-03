@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
+import { vBool, vOneOf, vReqStr, vStr, vStrArr } from "@/lib/validate";
 import type { Sql } from "./db";
 import type { PaidTier } from "./plan";
 
@@ -28,7 +29,7 @@ async function emailOf(sql: Sql, userId: string): Promise<string> {
 export const startCheckout = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   // userId + email viennent de la SESSION vérifiée, jamais du client.
-  .validator((input: { origin: string; workspaceId: string; plan: PaidTier }) => input)
+  .validator((input: { origin: string; workspaceId: string; plan: PaidTier }) => ({ origin: vStr(input.origin, 300), workspaceId: vStr(input.workspaceId, 64), plan: vOneOf(input.plan, ["basic", "pro"] as const, "pro") }))
   .handler(async ({ data, context }) => {
     const origin = originOf(data.origin);
     if (!origin) return { ok: false as const, error: "Origine invalide." };
@@ -65,7 +66,7 @@ export const startCheckout = createServerFn({ method: "POST" })
 
 export const confirmCheckout = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { sessionId: string }) => input)
+  .validator((input: { sessionId: string }) => ({ sessionId: vReqStr(input.sessionId, 100) }))
   .handler(async ({ data, context }) => {
     const sessionId = data.sessionId.trim();
     if (!sessionId.startsWith("cs_")) return { ok: false as const, error: "Session inconnue." };
@@ -125,7 +126,7 @@ export const confirmCheckout = createServerFn({ method: "POST" })
 export const startBillingPortal = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   // L'id client Stripe vient de `sipr_billing` pour CE compte, jamais du client.
-  .validator((input: { origin: string }) => input)
+  .validator((input: { origin: string }) => ({ origin: vStr(input.origin, 300) }))
   .handler(async ({ data, context }) => {
     const origin = originOf(data.origin);
     if (!origin) return { ok: false as const, error: "Portail de facturation indisponible." };

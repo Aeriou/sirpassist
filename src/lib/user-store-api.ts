@@ -4,6 +4,7 @@
  */
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
+import { vIntInRange, vObject } from "./validate";
 import type { Sql } from "./db";
 import * as udb from "./user-store-db";
 import type { UserSnapshot } from "./user-snapshot";
@@ -23,7 +24,12 @@ export const apiPullUserStore = createServerFn({ method: "POST" })
 
 export const apiPushUserStore = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { data: UserSnapshot; baseRev: number }) => input)
+  .validator((input: { data: UserSnapshot; baseRev: number }) => ({
+    // `data` doit être un objet JSON raisonnable (il est stocké en jsonb puis
+    // ré-appliqué au store côté client).
+    data: vObject(input.data) as unknown as UserSnapshot,
+    baseRev: vIntInRange(input.baseRev, 0, 2_000_000_000, 0),
+  }))
   .handler(
     async ({
       data,

@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { formatCoords, isoDate } from "./format";
 import { hitRateLimit, clientIpFrom } from "./rate-limit";
+import { vFiniteNum, vStr } from "./validate";
 import { inBelgium, isBelgianPostcode } from "./place";
 
 /** Limite le proxy géo public, par IP (évite qu'on épuise le quota Nominatim). */
@@ -158,7 +159,10 @@ function dedupePlaces(hits: Place[]): Place[] {
 }
 
 export const reverseGeocode = createServerFn({ method: "POST" })
-  .validator((input: { lat: number; lng: number }) => input)
+  .validator((input: { lat: number; lng: number }) => ({
+    lat: vFiniteNum(input.lat),
+    lng: vFiniteNum(input.lng),
+  }))
   .handler(async ({ data }): Promise<{ ok: true; place: Place } | { ok: false; error: string }> => {
     if (!inBelgium(data.lat, data.lng)) {
       return { ok: false, error: "Point hors Belgique." };
@@ -195,7 +199,7 @@ export const reverseGeocode = createServerFn({ method: "POST" })
   });
 
 export const searchBelgianAddress = createServerFn({ method: "POST" })
-  .validator((input: { q: string }) => input)
+  .validator((input: { q: string }) => ({ q: vStr(input.q, 200) }))
   .handler(async ({ data }): Promise<{ ok: true; hits: Place[] } | { ok: false; error: string }> => {
     const q = data.q.trim();
     if (q.length < 5) return { ok: true, hits: [] };

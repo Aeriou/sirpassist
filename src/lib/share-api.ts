@@ -8,9 +8,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { hitRateLimit } from "./rate-limit";
+import { vBool, vOneOf, vReqStr, vStr } from "./validate";
 import type { Sql } from "./db";
 import * as sdb from "./share-db";
-import type { SharePayloadV1 } from "./share-payload";
+import { isSharePayloadV1, type SharePayloadV1 } from "./share-payload";
 
 const MAX_PAYLOAD_BYTES = 8_000_000; // ~8 Mo de JSON (photos comprises)
 
@@ -37,7 +38,14 @@ export const apiSendShare = createServerFn({ method: "POST" })
       summary: string;
       payload: SharePayloadV1;
       replyTo?: string | null;
-    }) => input,
+    }) => ({
+      toEmail: vReqStr(input.toEmail, 200).toLowerCase(),
+      kind: vOneOf(input.kind, ["visit", "anomaly"] as const, "visit"),
+      title: vStr(input.title, 200),
+      summary: vStr(input.summary, 400),
+      payload: input.payload,
+      replyTo: typeof input.replyTo === "string" ? input.replyTo.slice(0, 64) : null,
+    }),
   )
   .handler(async ({ data, context }) => {
     const sql = await getSqlClient();
@@ -50,7 +58,10 @@ export const apiSendShare = createServerFn({ method: "POST" })
     if (!rl.ok) {
       return { ok: false as const, reason: "rate_limited" as const, retryAfter: rl.retryAfter };
     }
-    if (JSON.stringify(data.payload ?? {}).length > MAX_PAYLOAD_BYTES) {
+    if (!isSharePayloadV1(data.payload)) {
+      return { ok: false as const, reason: "bad_payload" as const };
+    }
+    if (JSON.stringify(data.payload).length > MAX_PAYLOAD_BYTES) {
       return { ok: false as const, reason: "too_large" as const };
     }
     const me = await currentUser(sql, context.userId);
@@ -70,7 +81,7 @@ export const apiSendShare = createServerFn({ method: "POST" })
 /** Aperçu de la charge utile SANS consommer la proposition (destinataire seul). */
 export const apiPreviewShare = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { offerId: string }) => input)
+  .validator((input: { offerId: string }) => ({ offerId: vReqStr(input.offerId, 64) }))
   .handler(
     async ({
       data,
@@ -115,7 +126,10 @@ export const apiShareInboxCount = createServerFn({ method: "POST" })
 
 export const apiRespondShare = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { offerId: string; accept: boolean }) => input)
+  .validator((input: { offerId: string; accept: boolean }) => ({
+    offerId: vReqStr(input.offerId, 64),
+    accept: vBool(input.accept),
+  }))
   .handler(
     async ({
       data,
@@ -142,7 +156,7 @@ export const apiRespondShare = createServerFn({ method: "POST" })
 
 export const apiCancelShare = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { offerId: string }) => input)
+  .validator((input: { offerId: string }) => ({ offerId: vReqStr(input.offerId, 64) }))
   .handler(async ({ data, context }) => {
     const sql = await getSqlClient();
     return sdb.cancelOffer(sql, { offerId: data.offerId, userId: context.userId });

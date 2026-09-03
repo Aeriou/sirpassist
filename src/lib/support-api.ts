@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
+import { vBool, vOneOf, vReqStr, vStr, vStrArr } from "@/lib/validate";
 import { hitRateLimit } from "./rate-limit";
 import { isOwnerEmail } from "./plan-server";
 import { formatGrokPrompt } from "./support";
@@ -96,7 +97,20 @@ function clipPhotos(photos: string[]): string[] {
  */
 export const submitSupportTicket = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: SupportSubmitInput) => input)
+  .validator((input: SupportSubmitInput) => ({
+    kind: vOneOf(input.kind, ["bug", "amelioration"] as const, "bug"),
+    title: vStr(input.title, 400),
+    description: vStr(input.description, 20_000),
+    page: vStr(input.page, 160),
+    photos: vStrArr(input.photos, MAX_PHOTOS, MAX_PHOTO_CHARS + 10_000),
+    authorName: vStr(input.authorName, 160),
+    authorTitle: vStr(input.authorTitle, 160),
+    authorLevel: ([1, 2, 3].includes(input.authorLevel as number)
+      ? input.authorLevel
+      : 3) as AdvisorLevel,
+    organisation: vStr(input.organisation, 200),
+    workspaceName: vStr(input.workspaceName, 200),
+  }))
   .handler(async ({ data, context }): Promise<{ ok: true; id: string } | { ok: false; error: string }> => {
     const title = data.title.trim().slice(0, 160);
     const description = data.description.trim().slice(0, 8000);
@@ -183,7 +197,7 @@ export const apiListSupportTickets = createServerFn({ method: "POST" })
 /** Revue d'une demande par le propriétaire. `prompt` = bloc à coller dans Grok. */
 export const apiReviewTicket = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { id: string; action: "valider" | "refuser" | "traiter" }) => input)
+  .validator((input: { id: string; action: "valider" | "refuser" | "traiter" }) => ({ id: vReqStr(input.id, 64), action: vOneOf(input.action, ["valider", "refuser", "traiter"] as const, "traiter") }))
   .handler(
     async ({
       data,

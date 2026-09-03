@@ -132,7 +132,9 @@ export function ShareButton({
                     ? "Dossier trop lourd à partager (trop de photos). Partagez constat par constat."
                     : res.reason === "rate_limited"
                       ? "Trop de partages d'affilée — réessayez dans un moment."
-                      : "Envoi impossible.",
+                      : res.reason === "bad_payload"
+                        ? "Contenu du partage invalide."
+                        : "Envoi impossible.",
         );
         return;
       }

@@ -3,6 +3,7 @@
  */
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
+import { vBool, vOneOf, vReqStr, vStr, vStrArr } from "@/lib/validate";
 import { hitRateLimit } from "./rate-limit";
 import type { Sql } from "./db";
 import * as assetDb from "./asset-db";
@@ -20,7 +21,7 @@ const MAX_BYTES_PER_USER = 300_000_000; // ~300 Mo
 
 export const apiPutAsset = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { assetId: string; mime: string; data: string }) => input)
+  .validator((input: { assetId: string; mime: string; data: string }) => ({ assetId: vStr(input.assetId, 64), mime: vStr(input.mime, 64), data: vStr(input.data, 4_200_000) }))
   .handler(async ({ data, context }): Promise<{ ok: boolean; reason?: "quota" | "rate" }> => {
     if (!data.assetId || !data.data.startsWith("data:image/") || data.data.length > MAX_DATA_LEN) {
       return { ok: false };
@@ -52,7 +53,7 @@ export const apiPutAsset = createServerFn({ method: "POST" })
 
 export const apiGetAsset = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { assetId: string }) => input)
+  .validator((input: { assetId: string }) => ({ assetId: vReqStr(input.assetId, 64) }))
   .handler(async ({ data, context }): Promise<{ data: string | null }> => {
     const sql = await getSqlClient();
     const row = await assetDb.getAsset(sql, context.userId, data.assetId);
