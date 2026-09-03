@@ -1,11 +1,14 @@
 import { formatCoords } from "./format";
 import type { GeoFix } from "./types";
 
-// Une photo de constat sert à COMPRENDRE le dossier, pas à archiver en haute
-// définition : on plafonne la largeur et on encode en JPEG léger. ~80–200 Ko
-// au lieu de plusieurs Mo — ça allège le cache local ET la synchro serveur.
-export const PHOTO_MAX_W = 1280;
-export const PHOTO_QUALITY = 0.7;
+// Photo de constat : sert à COMPRENDRE le dossier ET à faire foi (preuve CBE).
+// On l'allège (largeur plafonnée, JPEG) SANS toucher à sa valeur légale : le
+// bandeau horodaté — date/heure + lieu (adresse ou coordonnées GPS) + mention
+// « SiprAssist · preuve CBE » — est REDESSINÉ dans les pixels APRÈS le
+// redimensionnement, donc toujours net et lisible sur l'image stockée.
+// ~150–350 Ko à 1600 px / q0.75 : léger, avec de la marge pour zoomer un détail.
+export const PHOTO_MAX_W = 1600;
+export const PHOTO_QUALITY = 0.75;
 
 export async function stampPhoto(
   dataUrl: string,
@@ -22,6 +25,7 @@ export async function stampPhoto(
   canvas.height = Math.max(1, Math.round(srcH * scale));
   const ctx = canvas.getContext("2d");
   if (!ctx) return dataUrl;
+  // 1) image redimensionnée, PUIS 2) bandeau de preuve par-dessus (ci-dessous).
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
   const h = canvas.height;
   const w = canvas.width;
