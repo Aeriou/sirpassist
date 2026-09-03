@@ -857,6 +857,9 @@ export const useSipr = create<State>()(
                 : v;
             return {
               ...base,
+              // Un retour / une mise à jour ré-ouvre le dossier : il doit
+              // ré-apparaître sur l'Accueil pour être traité.
+              status: "en_cours" as const,
               sharedFrom: v.sharedFrom ?? from,
               sharedThreadId: v.sharedThreadId ?? opts.threadId,
               shareNotes: mergeShareNotes(v.shareNotes, sv.shareNotes),
@@ -932,7 +935,10 @@ export const useSipr = create<State>()(
           site: sv.site,
           interlocutor: sv.interlocutor,
           date: sv.date,
-          status: sv.status,
+          // On reçoit une copie à relire / retravailler : elle doit apparaître
+          // sur l'Accueil (qui ne liste que « en cours »), même si l'émetteur
+          // avait clôturé la sienne.
+          status: "en_cours",
           coverPhoto: sv.coverPhoto,
           notes: sv.notes,
           geo: sv.geo,
