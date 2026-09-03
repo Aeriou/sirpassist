@@ -1,74 +1,85 @@
-# Mise en route — nouveau projet (GitHub + Vercel + Supabase)
+# Mise en route / redéploiement
 
-Objectif de cette étape : déployer l'app **telle quelle** (comportement actuel préservé)
-sur ta nouvelle infra, et confirmer que le build Vercel passe. Aucune modification de
-comportement ici — juste le nettoyage et le passage en variables d'environnement.
+État actuel : l'app tourne sur **GitHub + Vercel + Neon Postgres**, avec
+**Better Auth** (e-mail / mot de passe + 2FA) et **Stripe** (webhook signé).
+Supabase n'est plus utilisé (retiré au fil de la refonte).
 
-Dossier local du projet : `C:\Users\Phil\SIPPAssist\sirpassist`
-Branches : `main` (référence) · `refonte-securite` (travail).
+- URL de prod : https://sirpassist.vercel.app
+- Dépôt : `Aeriou/sirpassist` · branche unique `main` (Vercel déploie à chaque push)
+- Dossier local : `C:\Users\Phil\SIPPAssist\sirpassist`
+- Base : Neon `winter-sea-45665868` (Frankfurt), DB `neondb`, `DATABASE_URL` *pooled*
 
 ---
 
-## 1. GitHub — nouveau dépôt
+## Variables d'environnement Vercel
 
-1. Sur github.com → **New repository** → nom par ex. `sippassist` → **Private** → *ne pas* cocher « Add a README ». Créer.
-2. Dans un terminal (Git est installé) :
+Projet Vercel `sirpassist` → **Settings → Environment Variables** (Production + Preview).
+
+### Requises
+
+| Nom | Valeur |
+|---|---|
+| `VITE_AUTH_ENABLED` | `true` |
+| `DATABASE_URL` | chaîne **pooled** Neon (`...-pooler...`) |
+| `BETTER_AUTH_SECRET` | 64 hex — `openssl rand -hex 32`. **Ne jamais la regénérer** une fois la 2FA en service : elle chiffre les secrets TOTP au repos, la changer verrouille tous les comptes 2FA (il faut alors les réinitialiser en base). |
+| `BETTER_AUTH_URL` | `https://sirpassist.vercel.app` |
+
+### Optionnelles (fonctionnalités désactivées si absentes)
+
+| Nom | Effet si absent |
+|---|---|
+| `STRIPE_SECRET_KEY` | paiement indisponible (le reste marche) |
+| `STRIPE_WEBHOOK_SECRET` | le webhook `/api/stripe/webhook` rejette tout |
+| `STRIPE_PRICE_ID` / `STRIPE_PRICE_ID_BASIC` | prix créés/retrouvés automatiquement au 1ᵉʳ checkout |
+| `XAI_API_KEY` | l'analyse IA retombe sur l'analyse locale (parsing) |
+| `RESEND_API_KEY` / `RESEND_FROM` | **vérification d'e-mail dormante** (voir `SETUP-EMAIL.md`) ; sans elles, `requireEmailVerification` reste off |
+| `ACCOUNTS_AUTO_APPROVE=true` | les nouveaux comptes sont auto-validés (sinon le propriétaire valide via `/compte`) |
+
+Le compte propriétaire (`phpiheyns@hotmail.com`, Pro gratuit à vie) est une
+**constante de code** : `OWNER_EMAILS` dans `src/lib/plan-server.ts` — pas une
+variable d'env.
+
+---
+
+## Redéployer de zéro
+
+1. **GitHub** — pousser `main` sur `Aeriou/sirpassist`.
+2. **Neon** — créer une base, récupérer la chaîne *pooled* → `DATABASE_URL`.
+   Les migrations `migrations/*.sql` s'appliquent **au build Vercel** via
+   `npm run build` (→ `npm run db:migrate`). Rien à lancer à la main.
+3. **Vercel** — importer le dépôt. Framework : *Other*. Build Command :
+   `npm run build` (impératif, sinon `db:migrate` ne tourne pas). Renseigner les
+   variables ci-dessus. **Deploy**.
+4. **Stripe** (si paiement) — dashboard → webhook vers
+   `https://<domaine>/api/stripe/webhook`, événements `checkout.session.completed`
+   + `customer.subscription.updated|deleted` → `STRIPE_WEBHOOK_SECRET`.
+
+---
+
+## Vérification locale (avant chaque push)
+
+Node portable : `C:\Users\Phil\SIPPAssist\_tools\node-v22.23.2-win-x64\` (dans le PATH).
 
 ```bash
-cd C:\Users\Phil\SIPPAssist\sirpassist
-git remote add origin https://github.com/<ton-compte>/sippassist.git
-git push -u origin main
-git push -u origin refonte-securite
+npm run typecheck
+npm run build
+node --experimental-strip-types scripts/dryrun-workspace.mts
+node --experimental-strip-types scripts/dryrun-share.mts
+node --experimental-strip-types scripts/dryrun-user-store.mts
+node --experimental-strip-types scripts/dryrun-account.mts
+node --experimental-strip-types scripts/dryrun-asset.mts
+node --experimental-strip-types scripts/dryrun-rate-limit.mts
+node --experimental-strip-types scripts/dryrun-group-classeur.mts
 ```
 
-Si Git demande une authentification : utiliser un **Personal Access Token** GitHub
-(Settings → Developer settings → Tokens) comme mot de passe.
+Sans `DATABASE_URL`, l'app utilise un PGLite local (WASM) qui applique lui-même
+les migrations — utile pour le dev, jamais en prod.
 
 ---
 
-## 2. Supabase — nouveau projet
+## Docs liées
 
-1. supabase.com → **New project** (région Europe, ex. `eu-central-1`). Noter le mot de passe DB.
-2. Projet → **Project Settings → API** : relever
-   - **Project URL** → `VITE_SUPABASE_URL`
-   - clé **`publishable`** (ou `anon`) → `VITE_SUPABASE_PUBLISHABLE_KEY`
-3. Projet → **SQL Editor → New query** : coller le script de schéma cloud et **Run**.
-   Le script est dans le code : `src/lib/supabase-schema.ts` (constante `SUPABASE_SCHEMA_SQL`).
-   Copier tout ce qui est entre les backticks.
-   *(Ce backend Supabase disparaîtra en Phase 3 — on le garde juste pour que la
-   version de référence tourne à l'identique.)*
-
----
-
-## 3. Vercel — nouveau projet
-
-1. vercel.com → **Add New → Project** → importer le dépôt GitHub `sippassist`.
-2. Framework Preset : **Vite** (ou « Other »). Build Command : `npm run build`.
-   Laisser le reste par défaut (le preset Nitro `vercel` produit `.vercel/output`).
-3. **Environment Variables** (Production + Preview) :
-
-   | Nom | Valeur | Remarque |
-   |---|---|---|
-   | `VITE_AUTH_ENABLED` | `false` | on garde le comportement actuel pour la référence ; passera à `true` en Phase 2 |
-   | `VITE_SUPABASE_URL` | *(URL projet Supabase)* | |
-   | `VITE_SUPABASE_PUBLISHABLE_KEY` | *(clé publishable Supabase)* | |
-   | `STRIPE_SECRET_KEY` | *(nouvelle clé test `sk_test_...`)* | optionnel ; sans elle, seul le paiement est indisponible |
-   | `XAI_API_KEY` | *(ta clé xAI, optionnel)* | sans elle, l'analyse IA retombe sur l'analyse locale |
-
-   Ne **pas** définir `DATABASE_URL` pour l'instant (ajout en Phase 2 avec Neon).
-4. **Deploy**. Vérifier que le build se termine en vert et que l'app s'ouvre.
-
----
-
-## 4. Clé Stripe
-
-Dans le dashboard Stripe : **révoquer** l'ancienne clé test `sk_test_51U9pPj…`
-(Developers → API keys → Roll key) puisqu'elle a circulé, puis créer/relever une
-nouvelle clé test pour `STRIPE_SECRET_KEY` ci-dessus.
-
----
-
-## 5. Me redire
-
-Une fois le déploiement Vercel vert (ou s'il échoue, coller le log de build) :
-on enchaîne sur la **Phase 2 — activation de Better Auth** sur la branche `refonte-securite`.
+- `SETUP-PHASE2.md` — activation Better Auth + note de sécurité sur `BETTER_AUTH_SECRET` / 2FA
+- `SETUP-EMAIL.md` — activer la vérification d'e-mail (Resend + domaine)
+- `SETUP-RLS.md` — activer les politiques RLS Postgres (défense en profondeur, aujourd'hui inertes)
+- `REFONTE-SECURITE.md` — historique de la refonte (terminée)
