@@ -4,7 +4,6 @@ import { Building2, Copy, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { AuthPanel } from "@/components/auth-panel";
 import { doSignOut } from "@/lib/auth/sign-out";
-import { CloudCard } from "@/components/cloud-card";
 import { GroupSection } from "@/components/group-section";
 import { AccountPendingBanner, PendingAccountsAdmin } from "@/components/account-approval";
 import { PlanBanner } from "@/components/plan-banner";
