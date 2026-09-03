@@ -61,7 +61,7 @@ function ComptePage() {
     let cancelled = false;
     void (async () => {
       const res = await confirmCheckout({
-        data: { sessionId: search.session_id!, email: session.email },
+        data: { sessionId: search.session_id! },
       });
       if (cancelled) return;
       if (!res.ok) {
@@ -137,7 +137,7 @@ function ComptePage() {
                 : "Choisissez Basic ou Pro pour continuer après l'essai."}
           </p>
           {session.stripeCustomerId && !plan.admin ? (
-            <Button variant="outline" onClick={() => void openStripePortal(session.stripeCustomerId!)}>
+            <Button variant="outline" onClick={() => void openStripePortal()}>
               Gérer la facturation
             </Button>
           ) : null}

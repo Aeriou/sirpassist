@@ -99,6 +99,15 @@ export async function writeServerPlan(
   `;
 }
 
+/** Id client Stripe du compte donné (pour le portail de facturation). */
+export async function stripeCustomerIdOf(sql: Sql, userId: string): Promise<string | null> {
+  const rows = await sql<{ stripe_customer_id: string | null }>`
+    select stripe_customer_id from sipr_billing where user_id = ${userId} limit 1
+  `;
+  const id = rows[0]?.stripe_customer_id ?? null;
+  return id && id.startsWith("cus_") ? id : null;
+}
+
 /** Retrouve l'utilisateur par son id client Stripe (webhook). */
 export async function userIdByStripeCustomer(
   sql: Sql,

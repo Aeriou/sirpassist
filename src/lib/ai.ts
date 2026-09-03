@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { authMiddleware } from "@/lib/auth/middleware";
 import { buildKinney, nearestOption, PROBABILITY, EXPOSURE, GRAVITY } from "./kinney";
 import { THEMES, type ThemeId } from "./code-bien-etre";
 import type { AnomalyDraft } from "./parse-observation";
@@ -26,6 +27,12 @@ type AnalyzeAnomalyInput = {
 type AnalyzeFdsInput = {
   photo: string;
 };
+
+/** N'accepte qu'une image en data URL — jamais une URL distante (SSRF via le
+ *  fournisseur IA qui irait la chercher). */
+function safePhoto(photo?: string): string | undefined {
+  return typeof photo === "string" && photo.startsWith("data:image/") ? photo : undefined;
+}
 
 function extractJson(text: string): unknown {
   const fenced = text.match(/```json\s*([\s\S]*?)```/i);
@@ -81,8 +88,10 @@ function asGhs(list: unknown): GhsCode[] {
 }
 
 export const analyzeAnomaly = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
   .validator((input: AnalyzeAnomalyInput) => input)
   .handler(async ({ data }): Promise<{ ok: true; draft: AnomalyDraft; source: "ai" | "local" } | { ok: false; error: string }> => {
+    const photo = safePhoto(data.photo);
     const fallback = parseObservation(data.transcription);
     const content: unknown[] = [
       {
@@ -108,10 +117,10 @@ export const analyzeAnomaly = createServerFn({ method: "POST" })
 Observation: ${data.transcription || "(photo seule)"}`,
       },
     ];
-    if (data.photo) {
+    if (photo) {
       content.push({
         type: "image_url",
-        image_url: { url: data.photo },
+        image_url: { url: photo },
       });
     }
 
@@ -162,11 +171,16 @@ Observation: ${data.transcription || "(photo seule)"}`,
   });
 
 export const analyzeFds = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
   .validator((input: AnalyzeFdsInput) => input)
   .handler(async ({ data }): Promise<
     | { ok: true; notice: Omit<FdsNotice, "id" | "createdAt" | "workspaceId">; source: "ai" | "local" }
     | { ok: false; error: string }
   > => {
+    const photo = safePhoto(data.photo);
+    if (!photo) {
+      return { ok: false, error: "Photo d'étiquette invalide." };
+    }
     const parsed = await grokJson(
       [
         {
@@ -201,7 +215,7 @@ export const analyzeFds = createServerFn({ method: "POST" })
 La notice (5 lignes) est une consigne de poste ultra-simple pour un ouvrier, en français de Belgique.
 Les champs reality sont des AIDE-MÉMOIRE facultatifs pour le conseiller (questions « La réalité »). Ne rien inventer pour « qui est exposé » ni « combien de temps » si ce n'est pas sur l'étiquette — laisser une chaîne vide.`,
             },
-            { type: "image_url", image_url: { url: data.photo } },
+            { type: "image_url", image_url: { url: photo } },
           ],
         },
       ],
@@ -238,7 +252,7 @@ Les champs reality sont des AIDE-MÉMOIRE facultatifs pour le conseiller (questi
       notice: {
         productName: String(o.productName || "Produit non identifié").slice(0, 80),
         manufacturer: o.manufacturer ? String(o.manufacturer).slice(0, 80) : undefined,
-        photo: data.photo,
+        photo,
         pictograms,
         signalWord: String(o.signalWord).toUpperCase() === "ATTENTION" ? "ATTENTION" : "DANGER",
         hazards,

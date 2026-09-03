@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
+import type { Sql } from "./db";
 import type { PaidTier } from "./plan";
 
 function originOf(raw: string) {
@@ -12,14 +13,30 @@ function originOf(raw: string) {
   }
 }
 
+async function getSqlClient(): Promise<Sql> {
+  const { getSql } = await import("@/lib/db");
+  return getSql();
+}
+
+async function emailOf(sql: Sql, userId: string): Promise<string> {
+  const rows = await sql<{ email: string | null }>`
+    select email from "user" where id = ${userId} limit 1
+  `;
+  return (rows[0]?.email ?? "").trim().toLowerCase();
+}
+
 export const startCheckout = createServerFn({ method: "POST" })
-  .validator((input: { origin: string; email: string; userId: string; workspaceId: string; plan: PaidTier }) => input)
-  .handler(async ({ data }) => {
+  .middleware([authMiddleware])
+  // userId + email viennent de la SESSION vérifiée, jamais du client.
+  .validator((input: { origin: string; workspaceId: string; plan: PaidTier }) => input)
+  .handler(async ({ data, context }) => {
     const origin = originOf(data.origin);
-    const email = data.email.trim().toLowerCase();
-    const plan: PaidTier = data.plan === "basic" ? "basic" : "pro";
     if (!origin) return { ok: false as const, error: "Origine invalide." };
-    if (!email.includes("@")) return { ok: false as const, error: "E-mail du compte requis." };
+    const sql = await getSqlClient();
+    const email = await emailOf(sql, context.userId);
+    if (!email.includes("@")) return { ok: false as const, error: "Compte sans e-mail." };
+    const plan: PaidTier = data.plan === "basic" ? "basic" : "pro";
+    const workspaceId = String(data.workspaceId ?? "").slice(0, 64);
     try {
       const { getStripe, ensureMonthlyPrice } = await import("./stripe.server");
       const stripe = getStripe();
@@ -28,40 +45,27 @@ export const startCheckout = createServerFn({ method: "POST" })
         mode: "subscription",
         locale: "fr",
         customer_email: email,
-        client_reference_id: data.userId,
+        client_reference_id: context.userId,
         line_items: [{ price, quantity: 1 }],
         success_url: `${origin}/compte?billing=success&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${origin}/compte?billing=cancel`,
         allow_promotion_codes: true,
         billing_address_collection: "auto",
         subscription_data: {
-          metadata: {
-            userId: data.userId,
-            workspaceId: data.workspaceId,
-            email,
-            plan,
-          },
+          metadata: { userId: context.userId, workspaceId, email, plan },
         },
-        metadata: {
-          userId: data.userId,
-          workspaceId: data.workspaceId,
-          email,
-          plan,
-        },
+        metadata: { userId: context.userId, workspaceId, email, plan },
       });
       if (!session.url) return { ok: false as const, error: "Session Stripe sans URL." };
       return { ok: true as const, url: session.url };
-    } catch (err) {
-      return {
-        ok: false as const,
-        error: err instanceof Error ? err.message : "Stripe indisponible.",
-      };
+    } catch {
+      return { ok: false as const, error: "Stripe indisponible." };
     }
   });
 
 export const confirmCheckout = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { sessionId: string; email: string }) => input)
+  .validator((input: { sessionId: string }) => input)
   .handler(async ({ data, context }) => {
     const sessionId = data.sessionId.trim();
     if (!sessionId.startsWith("cs_")) return { ok: false as const, error: "Session inconnue." };
@@ -71,6 +75,13 @@ export const confirmCheckout = createServerFn({ method: "POST" })
       const session = await stripe.checkout.sessions.retrieve(sessionId, {
         expand: ["subscription", "subscription.items.data.price", "customer"],
       });
+
+      // La session Stripe doit appartenir au compte connecté.
+      const owner = session.client_reference_id ?? session.metadata?.userId ?? null;
+      if (owner && owner !== context.userId) {
+        return { ok: false as const, error: "Cette session de paiement n'est pas la vôtre." };
+      }
+
       const paid = session.payment_status === "paid" || session.status === "complete";
       const sub = session.subscription;
       const subId = typeof sub === "string" ? sub : sub?.id;
@@ -87,11 +98,9 @@ export const confirmCheckout = createServerFn({ method: "POST" })
           : undefined;
       const plan = tierFromStripe(nickname, session.metadata?.plan);
 
-      // Source de vérité serveur, immédiate (le webhook fait ensuite le suivi).
       try {
-        const { getSql } = await import("@/lib/db");
         const { writeServerPlan } = await import("@/lib/plan-server");
-        await writeServerPlan(await getSql(), {
+        await writeServerPlan(await getSqlClient(), {
           userId: context.userId,
           plan,
           stripeCustomerId: customerId ?? null,
@@ -106,23 +115,24 @@ export const confirmCheckout = createServerFn({ method: "POST" })
         plan,
         subscriptionId: subId,
         customerId: customerId ?? "",
-        email: (session.customer_email || data.email).toLowerCase(),
+        email: (session.customer_email ?? "").toLowerCase(),
       };
-    } catch (err) {
-      return {
-        ok: false as const,
-        error: err instanceof Error ? err.message : "Vérification Stripe impossible.",
-      };
+    } catch {
+      return { ok: false as const, error: "Vérification Stripe impossible." };
     }
   });
 
 export const startBillingPortal = createServerFn({ method: "POST" })
-  .validator((input: { origin: string; customerId: string }) => input)
-  .handler(async ({ data }) => {
+  .middleware([authMiddleware])
+  // L'id client Stripe vient de `sipr_billing` pour CE compte, jamais du client.
+  .validator((input: { origin: string }) => input)
+  .handler(async ({ data, context }) => {
     const origin = originOf(data.origin);
-    const customerId = data.customerId.trim();
-    if (!origin || !customerId.startsWith("cus_")) {
-      return { ok: false as const, error: "Portail de facturation indisponible." };
+    if (!origin) return { ok: false as const, error: "Portail de facturation indisponible." };
+    const { stripeCustomerIdOf } = await import("@/lib/plan-server");
+    const customerId = await stripeCustomerIdOf(await getSqlClient(), context.userId);
+    if (!customerId) {
+      return { ok: false as const, error: "Aucun abonnement Stripe sur ce compte." };
     }
     try {
       const { getStripe } = await import("./stripe.server");
@@ -132,10 +142,7 @@ export const startBillingPortal = createServerFn({ method: "POST" })
         return_url: `${origin}/compte`,
       });
       return { ok: true as const, url: portal.url };
-    } catch (err) {
-      return {
-        ok: false as const,
-        error: err instanceof Error ? err.message : "Portail Stripe indisponible.",
-      };
+    } catch {
+      return { ok: false as const, error: "Portail Stripe indisponible." };
     }
   });

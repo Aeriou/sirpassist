@@ -36,12 +36,17 @@ Environments **Production + Preview**.
 |---|---|
 | `VITE_AUTH_ENABLED` | `true`  *(remplace la valeur `false` actuelle — Edit sur la ligne existante)* |
 | `DATABASE_URL` | *(chaîne pooled Neon de l'étape 1)* |
-| `BETTER_AUTH_SECRET` | `d72de0672445bc25c88f2a2e9171745e763d4831ae2365e6471f79b8c036fafc` |
+| `BETTER_AUTH_SECRET` | *(généré par toi — voir ci-dessous, NE PAS committer)* |
 | `BETTER_AUTH_URL` | `https://sirpassist.vercel.app` |
 
-> `BETTER_AUTH_SECRET` ci-dessus a été généré pour toi (aléatoire, 32 octets). Tu peux
-> le garder tel quel. Si tu ajoutes un jour un nom de domaine perso, mets à jour
-> `BETTER_AUTH_URL` avec cette nouvelle adresse.
+> **`BETTER_AUTH_SECRET`** : signe les cookies de session. Ne doit **jamais** apparaître
+> dans le dépôt. Génère-le et colle-le uniquement dans Vercel :
+> ```
+> openssl rand -hex 32
+> ```
+> (ou, sans openssl : `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`).
+> Le changer déconnecte toutes les sessions en cours (chacun se reconnecte). Si tu ajoutes
+> un domaine perso, mets aussi à jour `BETTER_AUTH_URL`.
 
 ---
 

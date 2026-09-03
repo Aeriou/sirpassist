@@ -63,8 +63,12 @@ function FdsPage() {
       setDraft(res.notice);
       setReality({ ...emptyReality(), ...res.notice.reality });
       toast.success("Étiquette lue. Complétez les questions si utile, puis enregistrez.");
-    } catch {
-      toast.error("Analyse impossible pour le moment.");
+    } catch (err) {
+      toast.error(
+        String((err as Error)?.message).includes("Unauthorized")
+          ? "Connectez-vous pour l'analyse d'étiquette."
+          : "Analyse impossible pour le moment.",
+      );
     } finally {
       setBusy(false);
     }
