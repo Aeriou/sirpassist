@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import { ArchiveMenu } from "@/components/archive-menu";
 import { DeleteIconButton } from "@/components/confirm-delete";
+import { Photo } from "@/components/photo";
 import { PlaceEditor } from "@/components/place-editor";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
@@ -143,9 +144,11 @@ function Terrain() {
                 params={{ id: v.id }}
                 className="flex min-w-0 flex-1 overflow-hidden"
               >
-                {v.coverPhoto ? (
-                  <img src={v.coverPhoto} alt="" className="hidden h-28 w-36 object-cover sm:block" />
-                ) : null}
+                <Photo
+                  dataUrl={v.coverPhoto}
+                  assetId={v.coverPhotoAssetId}
+                  className="hidden h-28 w-36 object-cover sm:block"
+                />
                 <div className="flex flex-1 items-center justify-between gap-3 p-4">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">

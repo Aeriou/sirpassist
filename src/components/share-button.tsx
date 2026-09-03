@@ -8,6 +8,8 @@ import {
   buildVisitPayload,
   summarize,
 } from "@/lib/share-payload";
+import { resolveAsset } from "@/lib/asset-cache";
+import { isDataUrl } from "@/lib/asset-id";
 import { useSipr } from "@/lib/store";
 import { Button } from "./ui/button";
 import { Dialog, DialogContent } from "./ui/dialog";
@@ -66,10 +68,31 @@ export function ShareButton({
         email: (session?.user?.email || "").toLowerCase(),
       };
       const originId = () => crypto.randomUUID();
+
+      // Le magasin d'images est PAR COMPTE : le partage doit transporter les
+      // octets de la photo, pas seulement son id. Si la copie locale a été
+      // déchargée (sync serveur), on la ré-hydrate depuis MON magasin avant
+      // d'emballer.
+      const scope = anomalies.filter(
+        (a) => a.visitId === visit.id && (anomalyId == null || a.id === anomalyId),
+      );
+      const hydrated = await Promise.all(
+        scope.map(async (a) => {
+          if (isDataUrl(a.photo) || !a.photoAssetId) return a;
+          const d = await resolveAsset(a.photoAssetId);
+          return d ? { ...a, photo: d } : a;
+        }),
+      );
+      let coverVisit = visit;
+      if (!isDataUrl(visit.coverPhoto) && visit.coverPhotoAssetId) {
+        const d = await resolveAsset(visit.coverPhotoAssetId);
+        if (d) coverVisit = { ...visit, coverPhoto: d };
+      }
+
       const built =
         anomalyId != null
-          ? buildAnomalyPayload({ visit, anomalies, by, originId, anomalyId })
-          : buildVisitPayload({ visit, anomalies, by, originId });
+          ? buildAnomalyPayload({ visit: coverVisit, anomalies: hydrated, by, originId, anomalyId })
+          : buildVisitPayload({ visit: coverVisit, anomalies: hydrated, by, originId });
 
       // Persister les identifiants d'origine sur mes enregistrements locaux :
       // un futur retour pourra ainsi être rapproché (étape 2).

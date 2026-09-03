@@ -98,13 +98,11 @@ export function UserStoreHost() {
     // Le blob `user_store` ne transporte QUE les ids (voir buildUserSnapshot).
     const reconcilePhotos = async () => {
       if (!online) return;
-      const withPhoto = useSipr
-        .getState()
-        .anomalies.filter((a) => isDataUrl(a.photo));
-      if (withPhoto.length === 0) return;
-
+      const st = useSipr.getState();
       const need: { id: string; data: string }[] = [];
-      for (const a of withPhoto) {
+
+      for (const a of st.anomalies) {
+        if (!isDataUrl(a.photo)) continue;
         let id = a.photoAssetId;
         if (!id) {
           id = await assetIdOf(a.photo as string);
@@ -113,6 +111,17 @@ export function UserStoreHost() {
         primeAsset(id, a.photo);
         need.push({ id, data: a.photo as string });
       }
+      for (const v of st.visits) {
+        if (!isDataUrl(v.coverPhoto)) continue;
+        let id = v.coverPhotoAssetId;
+        if (!id) {
+          id = await assetIdOf(v.coverPhoto as string);
+          useSipr.getState().updateVisit(v.id, { coverPhotoAssetId: id });
+        }
+        primeAsset(id, v.coverPhoto);
+        need.push({ id, data: v.coverPhoto as string });
+      }
+      if (need.length === 0) return;
 
       let known = serverAssetIds.current;
       if (!known) {

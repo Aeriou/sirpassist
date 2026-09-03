@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { resolveAsset } from "@/lib/asset-cache";
-import { isDataUrl } from "@/lib/asset-id";
 import { cn } from "@/lib/utils";
 
 /**
- * Affiche une photo de constat : la copie locale si elle est là, sinon on va
- * la chercher sur le serveur par son `assetId` (photos synchronisées à part du
- * blob de dossiers). Rien de bloquant : un cadre discret pendant le chargement.
+ * Affiche une photo : la copie locale si elle est là (data URL ou chemin), sinon
+ * on va la chercher sur le serveur par son `assetId` (photos synchronisées à
+ * part du blob de dossiers). Rien de bloquant : un cadre discret pendant le
+ * chargement.
  */
 export function Photo({
   dataUrl,
@@ -19,10 +19,10 @@ export function Photo({
   alt?: string;
   className?: string;
 }) {
-  const [src, setSrc] = useState<string | undefined>(isDataUrl(dataUrl) ? dataUrl : undefined);
+  const [src, setSrc] = useState<string | undefined>(dataUrl || undefined);
 
   useEffect(() => {
-    if (isDataUrl(dataUrl)) {
+    if (dataUrl) {
       setSrc(dataUrl);
       return;
     }

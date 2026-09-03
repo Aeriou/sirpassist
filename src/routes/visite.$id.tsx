@@ -4,6 +4,7 @@ import { Camera, FileText, MapPin, Pencil, ScanLine, Users } from "lucide-react"
 import { toast } from "sonner";
 import { AnomalyCard } from "@/components/anomaly-card";
 import { ConfirmDelete } from "@/components/confirm-delete";
+import { Photo } from "@/components/photo";
 import { FdsCard } from "@/components/fds-card";
 import { RpsCard } from "@/components/rps-card";
 import { PlaceEditor } from "@/components/place-editor";
@@ -128,9 +129,11 @@ function VisitDetail() {
   return (
     <div className="space-y-5">
       <header className="overflow-hidden rounded-2xl bg-surface shadow-[var(--shadow-border)]">
-        {visit.coverPhoto ? (
-          <img src={visit.coverPhoto} alt="" className="h-40 w-full object-cover md:h-52" />
-        ) : null}
+        <Photo
+          dataUrl={visit.coverPhoto}
+          assetId={visit.coverPhotoAssetId}
+          className="h-40 w-full object-cover md:h-52"
+        />
         <div className="space-y-3 p-4">
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone={visit.status === "en_cours" ? "accent" : "low"}>

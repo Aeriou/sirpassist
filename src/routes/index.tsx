@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { ArchiveMenu } from "@/components/archive-menu";
 import { AnomalyCard } from "@/components/anomaly-card";
+import { Photo } from "@/components/photo";
 import { DeleteIconButton } from "@/components/confirm-delete";
 import { DossierDialog } from "@/components/dossier-dialog";
 import { PlanBanner } from "@/components/plan-banner";
@@ -145,13 +146,11 @@ function Home() {
                   params={{ id: v.id }}
                   className="flex min-w-0 flex-1 overflow-hidden"
                 >
-                  {v.coverPhoto ? (
-                    <img
-                      src={v.coverPhoto}
-                      alt=""
-                      className="hidden h-28 w-28 shrink-0 object-cover sm:block"
-                    />
-                  ) : null}
+                  <Photo
+                    dataUrl={v.coverPhoto}
+                    assetId={v.coverPhotoAssetId}
+                    className="hidden h-28 w-28 shrink-0 object-cover sm:block"
+                  />
                   <div className="flex min-w-0 flex-1 items-center justify-between gap-3 overflow-hidden p-4">
                     <div className="min-w-0 flex-1 overflow-hidden">
                       <p className="text-xs font-medium tracking-wide text-accent">En cours</p>
