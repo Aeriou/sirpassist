@@ -72,11 +72,18 @@ export async function getScopedSql(userId: string): Promise<Sql> {
 Sans `APP_DATABASE_URL`, `getScopedSql` renvoie simplement `getSql()` — donc on
 peut livrer le code avant de faire la bascule.
 
-### 4. Étendre aux autres tables
+### 4. Points à traiter AVANT d'activer
 
-`workspace`, `workspace_member`, `workspace_snapshot`, `support_tickets`
-demandent des politiques plus fines (adhésion, vue propriétaire). À traiter en
-phase 2, une fois la phase 1 validée en prod.
+- **`account_approval`** : la ligne `pending` est créée par le hook Better Auth
+  `user.create` (au signup), qui tourne hors contexte `app.user_id`. Il faut
+  soit garder ce hook sur le rôle propriétaire, soit lui poser `app.user_id`
+  = l'id du nouvel utilisateur.
+- **Migrateur** : `scripts/migrate.mjs` doit rester sur le rôle propriétaire.
+- **`workspace`, `workspace_member`, `workspace_snapshot`, `support_tickets`** :
+  politiques plus fines (adhésion, vue propriétaire) — phase 2.
+
+Tant que ces points ne sont pas réglés, ne bascule pas `DATABASE_URL` de l'app
+sur `app_user`.
 
 ## Rollback
 
