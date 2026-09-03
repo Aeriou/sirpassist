@@ -15,6 +15,7 @@ import { Route as CompteRouteImport } from './routes/compte'
 import { Route as ConflitsRouteImport } from './routes/conflits'
 import { Route as ConnexionRouteImport } from './routes/connexion'
 import { Route as FdsRouteImport } from './routes/fds'
+import { Route as GroupeRouteImport } from './routes/groupe'
 import { Route as PaaRouteImport } from './routes/paa'
 import { Route as PartagesRouteImport } from './routes/partages'
 import { Route as PgpRouteImport } from './routes/pgp'
@@ -64,6 +65,11 @@ const ConnexionRoute = ConnexionRouteImport.update({
 const FdsRoute = FdsRouteImport.update({
   id: '/fds',
   path: '/fds',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GroupeRoute = GroupeRouteImport.update({
+  id: '/groupe',
+  path: '/groupe',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PaaRoute = PaaRouteImport.update({
@@ -174,6 +180,7 @@ export interface FileRoutesByFullPath {
   '/conflits': typeof ConflitsRoute
   '/connexion': typeof ConnexionRoute
   '/fds': typeof FdsRouteWithChildren
+  '/groupe': typeof GroupeRoute
   '/paa': typeof PaaRoute
   '/partages': typeof PartagesRoute
   '/pgp': typeof PgpRoute
@@ -201,6 +208,7 @@ export interface FileRoutesByTo {
   '/compte': typeof CompteRoute
   '/conflits': typeof ConflitsRoute
   '/connexion': typeof ConnexionRoute
+  '/groupe': typeof GroupeRoute
   '/paa': typeof PaaRoute
   '/partages': typeof PartagesRoute
   '/pgp': typeof PgpRoute
@@ -228,6 +236,7 @@ export interface FileRoutesById {
   '/conflits': typeof ConflitsRoute
   '/connexion': typeof ConnexionRoute
   '/fds': typeof FdsRouteWithChildren
+  '/groupe': typeof GroupeRoute
   '/paa': typeof PaaRoute
   '/partages': typeof PartagesRoute
   '/pgp': typeof PgpRoute
@@ -258,6 +267,7 @@ export interface FileRouteTypes {
     | '/conflits'
     | '/connexion'
     | '/fds'
+    | '/groupe'
     | '/paa'
     | '/partages'
     | '/pgp'
@@ -285,6 +295,7 @@ export interface FileRouteTypes {
     | '/compte'
     | '/conflits'
     | '/connexion'
+    | '/groupe'
     | '/paa'
     | '/partages'
     | '/pgp'
@@ -311,6 +322,7 @@ export interface FileRouteTypes {
     | '/conflits'
     | '/connexion'
     | '/fds'
+    | '/groupe'
     | '/paa'
     | '/partages'
     | '/pgp'
@@ -340,6 +352,7 @@ export interface RootRouteChildren {
   ConflitsRoute: typeof ConflitsRoute
   ConnexionRoute: typeof ConnexionRoute
   FdsRoute: typeof FdsRouteWithChildren
+  GroupeRoute: typeof GroupeRoute
   PaaRoute: typeof PaaRoute
   PartagesRoute: typeof PartagesRoute
   PgpRoute: typeof PgpRoute
@@ -399,6 +412,13 @@ declare module '@tanstack/react-router' {
       path: '/fds'
       fullPath: '/fds'
       preLoaderRoute: typeof FdsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/groupe': {
+      id: '/groupe'
+      path: '/groupe'
+      fullPath: '/groupe'
+      preLoaderRoute: typeof GroupeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/paa': {
@@ -586,6 +606,7 @@ const rootRouteChildren: RootRouteChildren = {
   ConflitsRoute: ConflitsRoute,
   ConnexionRoute: ConnexionRoute,
   FdsRoute: FdsRouteWithChildren,
+  GroupeRoute: GroupeRoute,
   PaaRoute: PaaRoute,
   PartagesRoute: PartagesRoute,
   PgpRoute: PgpRoute,

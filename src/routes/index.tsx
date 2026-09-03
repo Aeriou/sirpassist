@@ -319,7 +319,7 @@ function MyGroups() {
           <Users className="size-4 text-accent" />
           Mes groupes
         </h2>
-        <Link to="/compte" className="text-sm text-accent">
+        <Link to="/groupe" className="text-sm text-accent">
           Gérer
         </Link>
       </div>
@@ -329,7 +329,7 @@ function MyGroups() {
             {active.map((w) => (
               <li key={w.id}>
                 <Link
-                  to="/compte"
+                  to="/groupe"
                   className="inline-flex items-center gap-2 rounded-full bg-surface px-3 py-1.5 text-sm shadow-[var(--shadow-border)] transition-[box-shadow] hover:shadow-[var(--shadow-border-hover)]"
                 >
                   {w.name}
@@ -341,8 +341,8 @@ function MyGroups() {
             ))}
           </ul>
           <p className="text-sm">
-            <Link to="/classeurs-partages" className="text-accent">
-              Voir les classeurs partagés dans mes groupes
+            <Link to="/groupe" className="text-accent">
+              Ouvrir la page Groupe (classeurs partagés, membres…)
             </Link>
           </p>
         </>

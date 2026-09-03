@@ -19,6 +19,7 @@ import type { ShareRow } from "@/lib/share-db";
 import { isSharePayloadV1, type SharePayloadV1 } from "@/lib/share-payload";
 import type { SharedImportPlan } from "@/lib/share-merge";
 import { apiListMyInvites, apiRespondInvite } from "@/lib/workspace-api";
+import { GroupClasseursReceived } from "@/components/group-classeurs-received";
 import { ShareImportDialog } from "@/components/share-import-dialog";
 import { useSipr } from "@/lib/store";
 import { formatStamp } from "@/lib/format";
@@ -219,6 +220,8 @@ function PartagesPage() {
           </ul>
         )}
       </section>
+
+      <GroupClasseursReceived />
 
       <section className="space-y-3">
         <h2 className="flex items-center gap-2 text-sm font-medium">

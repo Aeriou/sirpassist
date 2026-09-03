@@ -138,9 +138,16 @@ export function AppShell({ children }: { children: ReactNode }) {
           <SideLink to="/conflits" active={pathname.startsWith("/conflits")} icon={GitMerge}>
             Conflits
           </SideLink>
+          {sessionUserId ? <PartagesSideLink active={pathname.startsWith("/partages")} /> : null}
           {sessionUserId ? (
-            <SideLink to="/partages" active={pathname.startsWith("/partages")} icon={Inbox}>
-              Partages
+            <SideLink
+              to="/groupe"
+              active={
+                pathname.startsWith("/groupe") || pathname.startsWith("/classeurs-partages")
+              }
+              icon={Users}
+            >
+              Groupe
             </SideLink>
           ) : null}
           <SideLink to="/support" active={pathname.startsWith("/support")} icon={LifeBuoy}>
@@ -271,12 +278,13 @@ function RemindersLink({ count }: { count: number }) {
   return <IconLink to="/rappels" count={count} label="Rappels d'actions" icon={Bell} />;
 }
 
-function SharesLink() {
+/** Partages ciblés en attente + invitations de groupe — un seul compteur,
+ *  partagé par la pastille d'en-tête et le lien latéral. */
+function useInboxCount() {
   const [count, setCount] = useState(0);
   useEffect(() => {
     let alive = true;
     const tick = () => {
-      // Partages de dossiers/constats + invitations de groupe : un seul compteur.
       Promise.all([
         apiShareInboxCount().catch(() => null),
         apiListMyInvites().catch(() => null),
@@ -298,6 +306,11 @@ function SharesLink() {
       window.clearInterval(t);
     };
   }, []);
+  return count;
+}
+
+function SharesLink() {
+  const count = useInboxCount();
   return (
     <IconLink to="/partages" count={count} label="Partages et invitations" icon={Inbox} tone="warn" />
   );
@@ -402,6 +415,9 @@ function pageTitle(path: string, search?: Record<string, unknown>) {
   if (path.startsWith("/anomalie")) return "Constat";
   if (path.startsWith("/rappels")) return "Rappels";
   if (path.startsWith("/partages")) return "Partages";
+  if (path.startsWith("/classeurs-partages")) return "Classeurs de groupe";
+  if (path.startsWith("/classeur")) return "Classeur";
+  if (path.startsWith("/groupe")) return "Groupe";
   if (path.startsWith("/compte")) return "Comptes";
   if (path.startsWith("/support")) return "Support";
   return "SiprAssist";
@@ -419,6 +435,7 @@ function SideLink({
   icon: Icon,
   children,
   pgpVue,
+  count = 0,
 }: {
   to:
     | (typeof NAV)[number]["to"]
@@ -426,12 +443,14 @@ function SideLink({
     | "/rappels"
     | "/conflits"
     | "/partages"
+    | "/groupe"
     | "/support"
     | "/rps";
   active: boolean;
   icon: typeof House;
   children: string;
   pgpVue?: PgpVue;
+  count?: number;
 }) {
   return (
     <Link
@@ -443,8 +462,22 @@ function SideLink({
       )}
     >
       <Icon className="size-4" />
-      {children}
+      <span className="flex-1">{children}</span>
+      {count > 0 ? (
+        <span className="flex min-w-5 items-center justify-center rounded-full bg-warn px-1.5 text-xs font-semibold text-warn-fg">
+          {count > 9 ? "9+" : count}
+        </span>
+      ) : null}
     </Link>
+  );
+}
+
+function PartagesSideLink({ active }: { active: boolean }) {
+  const count = useInboxCount();
+  return (
+    <SideLink to="/partages" active={active} icon={Inbox} count={count}>
+      Partages
+    </SideLink>
   );
 }
 
