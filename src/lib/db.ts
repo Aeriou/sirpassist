@@ -10,6 +10,14 @@ const rawDatabaseUrl =
 const databaseUrl =
   rawDatabaseUrl && rawDatabaseUrl.trim() ? rawDatabaseUrl : undefined;
 
+// Connexion applicative RESTREINTE (rôle non-propriétaire) pour la Row-Level
+// Security. Optionnelle : sans elle, `getScopedSql` retombe sur `getSql()` et
+// la RLS reste inerte (cf. SETUP-RLS.md).
+const rawAppDatabaseUrl =
+  typeof process !== "undefined" ? process.env.APP_DATABASE_URL : undefined;
+const appDatabaseUrl =
+  rawAppDatabaseUrl && rawAppDatabaseUrl.trim() ? rawAppDatabaseUrl : undefined;
+
 /**
  * Active backend: real **Neon** when `DATABASE_URL` is set (deployed / configured
  * sandbox), otherwise a local embedded **PGLite** (Postgres compiled to WASM) so
@@ -46,6 +54,7 @@ export interface Sql {
  */
 const globalRef = globalThis as typeof globalThis & {
   __pgSqlPromise__?: Promise<Sql>;
+  __pgAppPoolPromise__?: Promise<import("pg").Pool>;
   __pgliteInstance__?: Promise<import("@electric-sql/pglite").PGlite>;
   __pgliteMigrateChain__?: Promise<void>;
 };
@@ -192,6 +201,57 @@ export function getSql(): Promise<Sql> {
     throw err;
   });
   return sqlPromise;
+}
+
+/** Y a-t-il un rôle applicatif restreint configuré ? (⇒ RLS active). */
+export const rlsEnabled = Boolean(appDatabaseUrl) && dbSource === "neon";
+
+function getAppPool(): Promise<import("pg").Pool> {
+  globalRef.__pgAppPoolPromise__ ??= (async () => {
+    const { Pool, types } = await import("pg");
+    types.setTypeParser(OID_INT8, Number);
+    types.setTypeParser(OID_DATE, identity);
+    types.setTypeParser(OID_INTERVAL, identity);
+    return new Pool({ connectionString: appDatabaseUrl });
+  })().catch((err) => {
+    globalRef.__pgAppPoolPromise__ = undefined;
+    throw err;
+  });
+  return globalRef.__pgAppPoolPromise__;
+}
+
+/**
+ * SQL client **scopé à un utilisateur** pour la Row-Level Security.
+ *
+ * Si `APP_DATABASE_URL` est défini, chaque requête tourne dans sa propre
+ * transaction, précédée de `set_config('app.user_id', <id vérifié>, true)` —
+ * les politiques RLS (migration 0012/0013) filtrent alors sur cet id. Sinon,
+ * retombe sur `getSql()` (RLS inerte). L'`userId` DOIT venir de
+ * `context.userId` (session Better Auth vérifiée), jamais du client.
+ */
+export async function getScopedSql(userId: string): Promise<Sql> {
+  if (!rlsEnabled) return getSql();
+  const pool = await getAppPool();
+  const uid = String(userId);
+  return toSql(async <T>(text: string, params: unknown[]) => {
+    const client = await pool.connect();
+    try {
+      await client.query("begin");
+      await client.query("select set_config('app.user_id', $1, true)", [uid]);
+      const res = await client.query(text, params);
+      await client.query("commit");
+      return res.rows as T[];
+    } catch (err) {
+      try {
+        await client.query("rollback");
+      } catch {
+        /* connexion déjà rompue */
+      }
+      throw err;
+    } finally {
+      client.release();
+    }
+  });
 }
 
 /**

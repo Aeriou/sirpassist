@@ -70,6 +70,7 @@ node --experimental-strip-types scripts/dryrun-account.mts
 node --experimental-strip-types scripts/dryrun-asset.mts
 node --experimental-strip-types scripts/dryrun-rate-limit.mts
 node --experimental-strip-types scripts/dryrun-group-classeur.mts
+node --experimental-strip-types scripts/dryrun-rls.mts
 ```
 
 Sans `DATABASE_URL`, l'app utilise un PGLite local (WASM) qui applique lui-même

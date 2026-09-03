@@ -5,19 +5,18 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { vIntInRange, vObject } from "./validate";
-import type { Sql } from "./db";
 import * as udb from "./user-store-db";
 import type { UserSnapshot } from "./user-snapshot";
 
-async function getSqlClient(): Promise<Sql> {
-  const { getSql } = await import("@/lib/db");
-  return getSql();
+async function scopedSql(userId: string) {
+  const { getScopedSql } = await import("@/lib/db");
+  return getScopedSql(userId);
 }
 
 export const apiPullUserStore = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }): Promise<{ rev: number; data: UserSnapshot | null }> => {
-    const sql = await getSqlClient();
+    const sql = await scopedSql(context.userId);
     const r = await udb.pullUserStore(sql, context.userId);
     return { rev: r.rev, data: (r.data as UserSnapshot | null) ?? null };
   });
@@ -38,7 +37,7 @@ export const apiPushUserStore = createServerFn({ method: "POST" })
       | { ok: true; rev: number }
       | { ok: false; reason: "stale"; rev: number; data: UserSnapshot | null }
     > => {
-      const sql = await getSqlClient();
+      const sql = await scopedSql(context.userId);
       const res = await udb.pushUserStore(sql, context.userId, data.data, data.baseRev);
       if (res.ok) return res;
       return {

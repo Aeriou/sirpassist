@@ -3,9 +3,9 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import type { Sql } from "./db";
 import { resolveServerPlan } from "./plan-server";
 
-async function getSqlClient(): Promise<Sql> {
-  const { getSql } = await import("@/lib/db");
-  return getSql();
+async function scopedSql(userId: string): Promise<Sql> {
+  const { getScopedSql } = await import("@/lib/db");
+  return getScopedSql(userId);
 }
 
 async function emailOf(sql: Sql, userId: string): Promise<string | null> {
@@ -25,7 +25,7 @@ export const apiGetMyPlan = createServerFn({ method: "POST" })
     async ({
       context,
     }): Promise<{ plan: "trial" | "basic" | "pro" | "expired"; trialEndsAt: string | null; owner: boolean }> => {
-      const sql = await getSqlClient();
+      const sql = await scopedSql(context.userId);
       const email = await emailOf(sql, context.userId);
       return resolveServerPlan(sql, context.userId, email);
     },

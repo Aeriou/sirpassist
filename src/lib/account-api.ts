@@ -15,6 +15,14 @@ async function getSqlClient(): Promise<Sql> {
   return getSql();
 }
 
+/** Connexion scopée RLS. Réservée à la lecture de SA PROPRE ligne
+ *  `account_approval` — les fonctions propriétaire (liste / décision) doivent
+ *  rester sur `getSqlClient()` (accès inter-comptes). */
+async function scopedSql(userId: string): Promise<Sql> {
+  const { getScopedSql } = await import("@/lib/db");
+  return getScopedSql(userId);
+}
+
 async function emailOf(sql: Sql, userId: string): Promise<string> {
   const rows = await sql<{ email: string | null }>`
     select email from "user" where id = ${userId} limit 1
@@ -25,7 +33,7 @@ async function emailOf(sql: Sql, userId: string): Promise<string> {
 export const apiMyAccountStatus = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }): Promise<{ status: adb.ApprovalStatus | "none"; owner: boolean }> => {
-    const sql = await getSqlClient();
+    const sql = await scopedSql(context.userId);
     const email = await emailOf(sql, context.userId);
     if (isOwnerEmail(email)) return { status: "approved", owner: true };
     return { status: await adb.myApprovalStatus(sql, context.userId), owner: false };

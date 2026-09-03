@@ -5,12 +5,11 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { vBool, vOneOf, vReqStr, vStr, vStrArr } from "@/lib/validate";
 import { hitRateLimit } from "./rate-limit";
-import type { Sql } from "./db";
 import * as assetDb from "./asset-db";
 
-async function getSqlClient(): Promise<Sql> {
-  const { getSql } = await import("@/lib/db");
-  return getSql();
+async function scopedSql(userId: string) {
+  const { getScopedSql } = await import("@/lib/db");
+  return getScopedSql(userId);
 }
 
 // ~4 Mo de data URL max par image (garde-fou ; nos photos font ~150–350 Ko).
@@ -26,7 +25,7 @@ export const apiPutAsset = createServerFn({ method: "POST" })
     if (!data.assetId || !data.data.startsWith("data:image/") || data.data.length > MAX_DATA_LEN) {
       return { ok: false };
     }
-    const sql = await getSqlClient();
+    const sql = await scopedSql(context.userId);
 
     const rl = await hitRateLimit(sql, {
       bucket: "asset:put",
@@ -55,7 +54,7 @@ export const apiGetAsset = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((input: { assetId: string }) => ({ assetId: vReqStr(input.assetId, 64) }))
   .handler(async ({ data, context }): Promise<{ data: string | null }> => {
-    const sql = await getSqlClient();
+    const sql = await scopedSql(context.userId);
     const row = await assetDb.getAsset(sql, context.userId, data.assetId);
     return { data: row?.data ?? null };
   });
@@ -63,6 +62,6 @@ export const apiGetAsset = createServerFn({ method: "POST" })
 export const apiListAssetIds = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }): Promise<{ ids: string[] }> => {
-    const sql = await getSqlClient();
+    const sql = await scopedSql(context.userId);
     return { ids: await assetDb.listAssetIds(sql, context.userId) };
   });

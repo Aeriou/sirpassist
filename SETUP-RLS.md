@@ -1,23 +1,26 @@
-# Activer la Row-Level Security (optionnel)
+# Activer la Row-Level Security
 
-La migration `0012_rls.sql` pose déjà les **politiques RLS** sur `user_store`,
-`user_asset`, `account_approval`, `sipr_billing`, `share_offer`. Elles sont
-**inertes** : l'app se connecte avec le rôle *propriétaire* des tables, pour
-lequel Postgres ignore la RLS. Aucun effet sur la prod tant que les étapes
-ci-dessous ne sont pas faites.
+**Le code est prêt.** La migration `0012`/`0013` pose les politiques RLS sur
+`user_store`, `user_asset`, `account_approval`, `sipr_billing`, `share_offer`,
+et les fonctions serveur concernées utilisent déjà `getScopedSql(context.userId)`
+(pose `set_config('app.user_id', …)` par requête). Tant que `APP_DATABASE_URL`
+n'est pas défini, `getScopedSql` retombe sur `getSql()` et la RLS reste inerte.
 
-But : si un jour une fonction serveur oublie de filtrer par `userId`, la base
-refuse quand même les lignes des autres comptes (défense en profondeur).
-L'isolation actuelle par le code reste correcte et testée — ceci est un filet.
+**But :** si une fonction serveur oublie un jour de filtrer par `userId`, la base
+refuse quand même les lignes des autres comptes. Filet de sécurité —
+l'isolation par le code reste correcte et testée.
 
-## Étapes (à faire quand tu veux)
+Il reste **2 étapes d'infra** (toi) + un redéploiement.
 
-### 1. Rôle Neon restreint
+---
 
-Neon → SQL Editor (base `neondb`) :
+## Étape 1 — Rôle Neon restreint
+
+Console Neon : **https://console.neon.tech/** → projet `winter-sea-45665868` →
+onglet **SQL Editor** (base `neondb`). Colle et exécute :
 
 ```sql
--- rôle applicatif, sans possession de table ni BYPASSRLS
+-- rôle applicatif : ni propriétaire de table, ni BYPASSRLS
 create role app_user login password 'CHOISIS_UN_MOT_DE_PASSE_FORT';
 
 grant connect on database neondb to app_user;
@@ -25,67 +28,78 @@ grant usage on schema public to app_user;
 grant select, insert, update, delete on all tables in schema public to app_user;
 grant usage, select on all sequences in schema public to app_user;
 
--- pour les tables créées par les futures migrations
+-- pour les tables des futures migrations
 alter default privileges in schema public
   grant select, insert, update, delete on tables to app_user;
 alter default privileges in schema public
   grant usage, select on sequences to app_user;
 ```
 
-> Le migrateur (`scripts/migrate.mjs`) doit continuer à tourner avec le rôle
-> **propriétaire** actuel (il crée des tables). Ne change que la connexion de
-> l'app (voir étape 2), pas celle du build.
+> Le migrateur (`npm run db:migrate` au build) continue d'utiliser `DATABASE_URL`
+> (rôle propriétaire) — il crée des tables, `app_user` ne le peut pas. On ne
+> change QUE la connexion runtime de l'app.
 
-### 2. Connexion de l'app
+---
 
-Il faut **deux** URLs :
+## Étape 2 — Variable Vercel
 
-| Variable Vercel | Rôle | Usage |
-|---|---|---|
-| `DATABASE_URL` | **propriétaire** (actuelle) | migrations au build |
-| `APP_DATABASE_URL` | `app_user` | requêtes des fonctions serveur |
+Neon → **Connect** → *Role* = `app_user`, *Connection pooling* = **on** → copie la
+chaîne (`postgresql://app_user:…-pooler.…/neondb?sslmode=require`).
 
-Récupère la chaîne pooled de `app_user` dans Neon (Connect → Role = `app_user`).
+Vercel : **https://vercel.com/aervox/sirpassist/settings/environment-variables**
+→ **Add** :
 
-### 3. Code : poser `app.user_id` par requête
+| Nom | Valeur |
+|---|---|
+| `APP_DATABASE_URL` | la chaîne **pooled** de `app_user` |
 
-`src/lib/db.ts` : ajouter un client « scopé » qui, pour `app_user`, ouvre une
-transaction et fait `set local app.user_id = <id vérifié>` avant les requêtes.
-Puis, dans chaque fonction serveur sous `authMiddleware`, remplacer
-`getSql()` par `getScopedSql(context.userId)`.
+`DATABASE_URL` (propriétaire) reste inchangée.
 
-Esquisse :
+Puis **Deployments** → dernier → `⋯` → **Redeploy**.
 
-```ts
-// nouveau, dans db.ts — actif seulement si APP_DATABASE_URL est défini
-export async function getScopedSql(userId: string): Promise<Sql> {
-  const base = await getAppSql();            // pool sur APP_DATABASE_URL
-  return wrap(async (text, params) => {
-    return base.transaction(async (tx) => {
-      await tx.query("select set_config('app.user_id', $1, true)", [userId]);
-      return tx.query(text, params);
-    });
-  });
-}
-```
+---
 
-Sans `APP_DATABASE_URL`, `getScopedSql` renvoie simplement `getSql()` — donc on
-peut livrer le code avant de faire la bascule.
+## Ce qui passe sous RLS (et ce qui reste en propriétaire)
 
-### 4. Points à traiter AVANT d'activer
+**Scopé `getScopedSql` (RLS active)** — accès strictement à ses propres lignes :
 
-- **`account_approval`** : la ligne `pending` est créée par le hook Better Auth
-  `user.create` (au signup), qui tourne hors contexte `app.user_id`. Il faut
-  soit garder ce hook sur le rôle propriétaire, soit lui poser `app.user_id`
-  = l'id du nouvel utilisateur.
-- **Migrateur** : `scripts/migrate.mjs` doit rester sur le rôle propriétaire.
-- **`workspace`, `workspace_member`, `workspace_snapshot`, `support_tickets`** :
-  politiques plus fines (adhésion, vue propriétaire) — phase 2.
+| Fonction | Table(s) |
+|---|---|
+| `apiPullUserStore` / `apiPushUserStore` | `user_store` |
+| `apiPutAsset` / `apiGetAsset` / `apiListAssetIds` | `user_asset` |
+| `apiListIncomingShares` / `apiListOutgoingShares` / `apiShareInboxCount` / `apiPreviewShare` / `apiRespondShare` / `apiCancelShare` | `share_offer` |
+| `apiMyAccountStatus` | `account_approval` (sa ligne) |
+| `apiGetMyPlan` | `sipr_billing` (sa ligne) |
 
-Tant que ces points ne sont pas réglés, ne bascule pas `DATABASE_URL` de l'app
-sur `app_user`.
+**Reste en propriétaire `getSql()` (RLS contournée, à dessein)** :
+
+- **Migrateur** (`scripts/migrate.mjs`) — crée des tables.
+- **Better Auth** — sa propre connexion via `DATABASE_URL` (signup, sessions).
+- **`apiSendShare`** — doit lire la ligne `account_approval` du *destinataire*.
+- **`apiListPendingAccounts` / `apiDecideAccount`** — le propriétaire agit sur
+  les lignes d'autres comptes.
+- **Webhook Stripe** (`/api/stripe/webhook`) — sessionless, écrit `sipr_billing`.
+- **`purgeUserData`** (suppression RGPD) — efface les lignes du compte via le
+  hook `afterDelete`.
+- Tout `workspace_*` / `group_classeur` / `support_tickets` — pas de RLS
+  (politiques « appartenance » = phase 2 ; l'isolation par le code y est
+  couverte par les dry-runs).
+
+---
+
+## Vérification
+
+- `node --experimental-strip-types scripts/dryrun-rls.mts` — contrôle **de
+  schéma** (RLS activée + politique présente sur les 5 tables). ⚠️ PGLite
+  n'applique pas la RLS à l'exécution, donc l'isolation **comportementale** ne
+  se teste que sur Neon.
+- Après le redéploiement avec `APP_DATABASE_URL` : se connecter avec 2 comptes
+  de test, vérifier que chacun ne voit que ses dossiers / photos / partages, et
+  que le parcours complet (création de compte, 2FA, partage, groupe) fonctionne.
+
+---
 
 ## Rollback
 
-Revenir `DATABASE_URL` de l'app sur le rôle propriétaire → la RLS redevient
-inerte, sans migration à défaire.
+Retirer `APP_DATABASE_URL` de Vercel → redéployer. `getScopedSql` retombe sur
+`getSql()`, la RLS redevient inerte. Aucune migration à défaire.

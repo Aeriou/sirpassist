@@ -20,6 +20,14 @@ async function getSqlClient(): Promise<Sql> {
   return getSql();
 }
 
+/** Connexion scopée RLS — pour les endpoints où tout se filtre sur
+ *  `context.userId` (from/to). `apiSendShare` reste sur `getSqlClient()` :
+ *  il doit lire la ligne `account_approval` du DESTINATAIRE. */
+async function scopedSql(userId: string): Promise<Sql> {
+  const { getScopedSql } = await import("@/lib/db");
+  return getScopedSql(userId);
+}
+
 async function currentUser(sql: Sql, userId: string): Promise<{ email: string; name: string }> {
   const rows = await sql<{ email: string | null; name: string | null }>`
     select email, name from "user" where id = ${userId} limit 1
@@ -90,7 +98,7 @@ export const apiPreviewShare = createServerFn({ method: "POST" })
       | { ok: false }
       | { ok: true; kind: "visit" | "anomaly"; payload: SharePayloadV1 | null }
     > => {
-      const sql = await getSqlClient();
+      const sql = await scopedSql(context.userId);
       const res = await sdb.getPayloadForRecipient(sql, data.offerId, context.userId);
       if (!res.ok) return { ok: false };
       return {
@@ -104,7 +112,7 @@ export const apiPreviewShare = createServerFn({ method: "POST" })
 export const apiListIncomingShares = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
-    const sql = await getSqlClient();
+    const sql = await scopedSql(context.userId);
     const rows = await sdb.listIncoming(sql, context.userId);
     return { ok: true as const, offers: rows };
   });
@@ -112,7 +120,7 @@ export const apiListIncomingShares = createServerFn({ method: "POST" })
 export const apiListOutgoingShares = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
-    const sql = await getSqlClient();
+    const sql = await scopedSql(context.userId);
     const rows = await sdb.listOutgoing(sql, context.userId);
     return { ok: true as const, offers: rows };
   });
@@ -120,7 +128,7 @@ export const apiListOutgoingShares = createServerFn({ method: "POST" })
 export const apiShareInboxCount = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
-    const sql = await getSqlClient();
+    const sql = await scopedSql(context.userId);
     return { ok: true as const, count: await sdb.countIncoming(sql, context.userId) };
   });
 
@@ -138,7 +146,7 @@ export const apiRespondShare = createServerFn({ method: "POST" })
       | { ok: false; reason: "not_found" }
       | { ok: true; accepted: boolean; kind: "visit" | "anomaly"; payload: SharePayloadV1 | null }
     > => {
-      const sql = await getSqlClient();
+      const sql = await scopedSql(context.userId);
       const res = await sdb.respondOffer(sql, {
         offerId: data.offerId,
         userId: context.userId,
@@ -158,6 +166,6 @@ export const apiCancelShare = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((input: { offerId: string }) => ({ offerId: vReqStr(input.offerId, 64) }))
   .handler(async ({ data, context }) => {
-    const sql = await getSqlClient();
+    const sql = await scopedSql(context.userId);
     return sdb.cancelOffer(sql, { offerId: data.offerId, userId: context.userId });
   });
