@@ -30,7 +30,6 @@ import { Route as RapportIdRouteImport } from './routes/rapport.$id'
 import { Route as RpsIndexRouteImport } from './routes/rps.index'
 import { Route as RpsIdRouteImport } from './routes/rps.$id'
 import { Route as SupportIndexRouteImport } from './routes/support.index'
-import { Route as SupportRevueRouteImport } from './routes/support.revue'
 import { Route as VisiteIdRouteImport } from './routes/visite.$id'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiStripeWebhookRouteImport } from './routes/api/stripe/webhook'
@@ -140,11 +139,6 @@ const SupportIndexRoute = SupportIndexRouteImport.update({
   path: '/',
   getParentRoute: () => SupportRoute,
 } as any)
-const SupportRevueRoute = SupportRevueRouteImport.update({
-  id: '/revue',
-  path: '/revue',
-  getParentRoute: () => SupportRoute,
-} as any)
 const VisiteIdRoute = VisiteIdRouteImport.update({
   id: '/visite/$id',
   path: '/visite/$id',
@@ -180,7 +174,6 @@ export interface FileRoutesByFullPath {
   '/fds/$id': typeof FdsIdRoute
   '/rapport/$id': typeof RapportIdRoute
   '/rps/$id': typeof RpsIdRoute
-  '/support/revue': typeof SupportRevueRoute
   '/visite/$id': typeof VisiteIdRoute
   '/fds/': typeof FdsIndexRoute
   '/rps/': typeof RpsIndexRoute
@@ -204,7 +197,6 @@ export interface FileRoutesByTo {
   '/fds/$id': typeof FdsIdRoute
   '/rapport/$id': typeof RapportIdRoute
   '/rps/$id': typeof RpsIdRoute
-  '/support/revue': typeof SupportRevueRoute
   '/visite/$id': typeof VisiteIdRoute
   '/fds': typeof FdsIndexRoute
   '/rps': typeof RpsIndexRoute
@@ -232,7 +224,6 @@ export interface FileRoutesById {
   '/fds/$id': typeof FdsIdRoute
   '/rapport/$id': typeof RapportIdRoute
   '/rps/$id': typeof RpsIdRoute
-  '/support/revue': typeof SupportRevueRoute
   '/visite/$id': typeof VisiteIdRoute
   '/fds/': typeof FdsIndexRoute
   '/rps/': typeof RpsIndexRoute
@@ -261,7 +252,6 @@ export interface FileRouteTypes {
     | '/fds/$id'
     | '/rapport/$id'
     | '/rps/$id'
-    | '/support/revue'
     | '/visite/$id'
     | '/fds/'
     | '/rps/'
@@ -285,7 +275,6 @@ export interface FileRouteTypes {
     | '/fds/$id'
     | '/rapport/$id'
     | '/rps/$id'
-    | '/support/revue'
     | '/visite/$id'
     | '/fds'
     | '/rps'
@@ -312,7 +301,6 @@ export interface FileRouteTypes {
     | '/fds/$id'
     | '/rapport/$id'
     | '/rps/$id'
-    | '/support/revue'
     | '/visite/$id'
     | '/fds/'
     | '/rps/'
@@ -492,13 +480,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SupportIndexRouteImport
       parentRoute: typeof SupportRoute
     }
-    '/support/revue': {
-      id: '/support/revue'
-      path: '/revue'
-      fullPath: '/support/revue'
-      preLoaderRoute: typeof SupportRevueRouteImport
-      parentRoute: typeof SupportRoute
-    }
     '/visite/$id': {
       id: '/visite/$id'
       path: '/visite/$id'
@@ -548,12 +529,10 @@ const RpsRouteChildren: RpsRouteChildren = {
 const RpsRouteWithChildren = RpsRoute._addFileChildren(RpsRouteChildren)
 
 interface SupportRouteChildren {
-  SupportRevueRoute: typeof SupportRevueRoute
   SupportIndexRoute: typeof SupportIndexRoute
 }
 
 const SupportRouteChildren: SupportRouteChildren = {
-  SupportRevueRoute: SupportRevueRoute,
   SupportIndexRoute: SupportIndexRoute,
 }
 

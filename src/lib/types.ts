@@ -293,7 +293,7 @@ export type RpsSituation = {
 };
 
 export type SupportKind = "bug" | "amelioration";
-export type SupportStatus = "envoye" | "valide" | "refuse";
+export type SupportStatus = "envoye" | "valide" | "refuse" | "traite";
 
 export type SupportTicket = {
   id: string;

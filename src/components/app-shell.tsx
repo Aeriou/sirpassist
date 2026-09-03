@@ -24,6 +24,7 @@ import { useOnline } from "@/lib/online";
 import { doSignOut } from "@/lib/auth/sign-out";
 import { apiShareInboxCount } from "@/lib/share-api";
 import { apiListPendingAccounts } from "@/lib/account-api";
+import { apiListSupportTickets } from "@/lib/support-api";
 import { TwoFactorCard } from "./two-factor-card";
 import { DeleteAccountButton } from "./delete-account";
 import { toast } from "sonner";
@@ -169,13 +170,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <RemindersLink count={reminderCount} />
           {sessionUserId ? <SharesLink /> : null}
           {sessionUserId ? <PendingAccountsLink /> : null}
-          <Link
-            to="/support"
-            className="relative flex size-11 items-center justify-center rounded-full bg-surface-2 text-fg"
-            aria-label="Support"
-          >
-            <LifeBuoy className="size-4" />
-          </Link>
+          <SupportLink />
           <button
             type="button"
             className="flex size-11 items-center justify-center rounded-full bg-surface-2 text-xs font-semibold"
@@ -205,13 +200,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <RemindersLink count={reminderCount} />
             {sessionUserId ? <SharesLink /> : null}
             {sessionUserId ? <PendingAccountsLink /> : null}
-            <Link
-              to="/support"
-              className="relative flex size-11 items-center justify-center rounded-full bg-surface-2 text-fg"
-              aria-label="Support"
-            >
-              <LifeBuoy className="size-4" />
-            </Link>
+            <SupportLink />
             <button type="button" className="text-left" onClick={() => setOpen(true)}>
               <ProfileButton />
             </button>
@@ -328,6 +317,31 @@ function PendingAccountsLink() {
   );
 }
 
+/** Lien Support (toujours visible) + pastille du nombre de demandes à traiter
+ *  (propriétaire uniquement — 0 pour les autres). */
+function SupportLink() {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    const tick = () => {
+      apiListSupportTickets()
+        .then((r) => {
+          if (alive) setCount(r.ok ? r.unreviewed : 0);
+        })
+        .catch(() => {});
+    };
+    tick();
+    const t = window.setInterval(tick, 30_000);
+    return () => {
+      alive = false;
+      window.clearInterval(t);
+    };
+  }, []);
+  return (
+    <IconLink to="/support" count={count} label="Support" icon={LifeBuoy} tone="warn" />
+  );
+}
+
 function IconLink({
   to,
   count,
@@ -335,7 +349,7 @@ function IconLink({
   icon: Icon,
   tone = "danger",
 }: {
-  to: "/rappels" | "/conflits" | "/partages" | "/compte";
+  to: "/rappels" | "/conflits" | "/partages" | "/compte" | "/support";
   count: number;
   label: string;
   icon: typeof Bell;
@@ -379,7 +393,6 @@ function pageTitle(path: string, search?: Record<string, unknown>) {
   if (path.startsWith("/rappels")) return "Rappels";
   if (path.startsWith("/partages")) return "Partages";
   if (path.startsWith("/compte")) return "Comptes";
-  if (path.startsWith("/support/revue")) return "Revue éditeur";
   if (path.startsWith("/support")) return "Support";
   return "SiprAssist";
 }

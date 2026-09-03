@@ -1,6 +1,4 @@
-import type { AdvisorLevel, SupportKind, SupportStatus, SupportTicket } from "./types";
-
-export const SUPPORT_INBOX = "phpiheyns@hotmail.com";
+import type { AdvisorLevel, SupportKind, SupportStatus } from "./types";
 
 export const SUPPORT_KINDS: { id: SupportKind; label: string; hint: string }[] = [
   {
@@ -22,6 +20,7 @@ export function supportKindLabel(kind: SupportKind) {
 export function supportStatusLabel(status: SupportStatus) {
   if (status === "valide") return "Validée";
   if (status === "refuse") return "Refusée";
+  if (status === "traite") return "Traitée";
   return "Envoyée";
 }
 
@@ -54,21 +53,3 @@ export function formatGrokPrompt(t: {
   ].join("\n");
 }
 
-export function mailtoDraft(t: Pick<SupportTicket, "kind" | "title" | "description" | "page" | "authorName" | "authorEmail" | "authorTitle" | "authorLevel" | "organisation" | "workspaceName">) {
-  const subject = `[SiprAssist ${supportKindLabel(t.kind)}] ${t.title}`;
-  const body = [
-    `Type: ${supportKindLabel(t.kind)}`,
-    `Titre: ${t.title}`,
-    `Page: ${t.page || "—"}`,
-    "",
-    t.description,
-    "",
-    "—",
-    `${t.authorName} <${t.authorEmail}>`,
-    `${t.authorTitle} · N${t.authorLevel}`,
-    `${t.organisation} · ${t.workspaceName}`,
-    "",
-    "(Joindre les captures depuis la messagerie si besoin.)",
-  ].join("\n");
-  return `mailto:${SUPPORT_INBOX}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-}
