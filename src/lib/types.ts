@@ -228,6 +228,8 @@ export type FdsNotice = {
   productName: string;
   manufacturer?: string;
   photo?: string;
+  /** Photo de l'étiquette sur le serveur (voir user_asset). */
+  photoAssetId?: string;
   pictograms: GhsCode[];
   signalWord: "DANGER" | "ATTENTION";
   hazards: string[];

@@ -3,6 +3,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { ConfirmDelete } from "@/components/confirm-delete";
 import { GhsRow } from "@/components/pictograms";
+import { Photo } from "@/components/photo";
 import { FdsRealityForm } from "@/components/fds-reality";
 import { FdsScope, type FdsScopeMode } from "@/components/fds-scope";
 import { Badge } from "@/components/ui/badge";
@@ -74,8 +75,12 @@ function FdsDetail() {
 
   return (
     <div className="space-y-5">
-      {notice.photo ? (
-        <img src={notice.photo} alt="" className="h-56 w-full rounded-2xl object-cover" />
+      {notice.photo || notice.photoAssetId ? (
+        <Photo
+          dataUrl={notice.photo}
+          assetId={notice.photoAssetId}
+          className="h-56 w-full rounded-2xl object-cover"
+        />
       ) : null}
       <header className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">

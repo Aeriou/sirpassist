@@ -77,7 +77,10 @@ export function buildUserSnapshot(state: BuildState): UserSnapshot {
       void _p;
       return a as Anomaly;
     }),
-    fds: realOnly(state.fds),
+    fds: realOnly(state.fds).map(({ photo: _p, ...f }) => {
+      void _p;
+      return f as FdsNotice;
+    }),
     rps: realOnly(state.rps),
     classeurs: realOnly(state.classeurs),
     pgpByWorkspace,

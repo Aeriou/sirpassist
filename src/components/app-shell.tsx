@@ -65,6 +65,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const conflicts = useSipr((s) => s.conflicts);
   const online = useOnline();
   const [open, setOpen] = useState(false);
+  // Anti-clignotement (React #418) : tant que le store persistant n'est pas
+  // réhydraté, le serveur et le premier rendu client montrent le MÊME squelette
+  // — pas de contenu « démo » remplacé ensuite.
+  const [booted, setBooted] = useState(() => useSipr.persist.hasHydrated());
   const reminderCount = useMemo(
     () => buildReminders(pgp, anomalies).filter((r) => !acked.includes(r.id)).length,
     [pgp, anomalies, acked],
@@ -98,10 +102,27 @@ export function AppShell({ children }: { children: ReactNode }) {
     document.body.style.removeProperty("overflow");
   }, [open]);
 
+  useEffect(() => {
+    if (booted) return;
+    if (useSipr.persist.hasHydrated()) {
+      setBooted(true);
+      return;
+    }
+    const unsub = useSipr.persist.onFinishHydration(() => setBooted(true));
+    // Filet de sécurité : ne jamais rester bloqué sur le squelette.
+    const t = window.setTimeout(() => setBooted(true), 2500);
+    return () => {
+      unsub();
+      window.clearTimeout(t);
+    };
+  }, [booted]);
+
   const pgpTab: PgpVue =
     pathname.startsWith("/pgp") && urlSearch.vue === "actions" ? "actions" : pathname.startsWith("/pgp") ? "recap" : pgpVue;
 
   const title = pageTitle(pathname, urlSearch);
+
+  if (!booted) return <AppBootSkeleton />;
 
   return (
     <div className="stripe min-h-dvh bg-bg text-fg">
@@ -270,6 +291,42 @@ export function AppShell({ children }: { children: ReactNode }) {
           })}
         </ul>
       </nav>
+    </div>
+  );
+}
+
+/** Écran d'attente pendant la réhydratation du store. Markup 100 % statique :
+ *  identique côté serveur et au premier rendu client (pas de mismatch #418). */
+function AppBootSkeleton() {
+  return (
+    <div className="stripe min-h-dvh bg-bg text-fg">
+      <aside className="fixed top-0 left-0 hidden h-dvh w-60 flex-col border-r border-border bg-surface md:flex">
+        <div className="px-4 py-5">
+          <Logo />
+          <p className="mt-1 text-xs text-subtle">Assistant SIPP de terrain</p>
+        </div>
+        <div className="flex flex-1 flex-col gap-2 px-3">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="h-9 animate-pulse rounded-lg bg-surface-2" />
+          ))}
+        </div>
+      </aside>
+
+      <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-border bg-bg/90 px-4 py-3 md:hidden">
+        <Logo />
+      </header>
+
+      <main className="md:ml-60">
+        <div className="mx-auto w-full max-w-5xl space-y-4 px-4 pt-8 md:px-8">
+          <div className="h-7 w-1/2 animate-pulse rounded-lg bg-surface-2" />
+          <div className="h-4 w-2/3 animate-pulse rounded bg-surface-2" />
+          <div className="grid gap-3 sm:grid-cols-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-28 animate-pulse rounded-2xl bg-surface-2" />
+            ))}
+          </div>
+        </div>
+      </main>
     </div>
   );
 }

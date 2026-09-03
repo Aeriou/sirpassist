@@ -121,6 +121,16 @@ export function UserStoreHost() {
         primeAsset(id, v.coverPhoto);
         need.push({ id, data: v.coverPhoto as string });
       }
+      for (const f of st.fds) {
+        if (!isDataUrl(f.photo)) continue;
+        let id = f.photoAssetId;
+        if (!id) {
+          id = await assetIdOf(f.photo as string);
+          useSipr.getState().updateFds(f.id, { photoAssetId: id });
+        }
+        primeAsset(id, f.photo);
+        need.push({ id, data: f.photo as string });
+      }
       if (need.length === 0) return;
 
       let known = serverAssetIds.current;
