@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { Inbox, Send } from "lucide-react";
+import { Inbox, Send, Users } from "lucide-react";
 import { AuthPanel } from "@/components/auth-panel";
 import { AccountPendingBanner } from "@/components/account-approval";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +18,7 @@ import {
 import type { ShareRow } from "@/lib/share-db";
 import { isSharePayloadV1, type SharePayloadV1 } from "@/lib/share-payload";
 import type { SharedImportPlan } from "@/lib/share-merge";
+import { apiListMyInvites, apiRespondInvite } from "@/lib/workspace-api";
 import { ShareImportDialog } from "@/components/share-import-dialog";
 import { useSipr } from "@/lib/store";
 import { formatStamp } from "@/lib/format";
@@ -166,6 +167,8 @@ function PartagesPage() {
 
       <AccountPendingBanner />
 
+      <GroupInvites />
+
       <section className="space-y-3">
         <h2 className="flex items-center gap-2 text-sm font-medium">
           <Inbox className="size-4 text-accent" />
@@ -272,5 +275,93 @@ function PartagesPage() {
         />
       ) : null}
     </div>
+  );
+}
+
+type GroupInvite = { id: string; name: string; kind: string; owner_name: string };
+
+/** Invitations à rejoindre un groupe — répondues ici plutôt que sur /compte,
+ *  pour que la pastille de l'en-tête pointe vers un seul endroit. */
+function GroupInvites() {
+  const [invites, setInvites] = useState<GroupInvite[]>([]);
+  const [acting, setActing] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  const refresh = useCallback(async () => {
+    try {
+      const r = await apiListMyInvites();
+      if (r.ok) setInvites(r.invites as GroupInvite[]);
+    } catch {
+      /* réseau : on retentera */
+    } finally {
+      setLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+    const t = window.setInterval(() => void refresh(), 20_000);
+    return () => window.clearInterval(t);
+  }, [refresh]);
+
+  async function respond(inv: GroupInvite, accept: boolean) {
+    setActing(inv.id);
+    try {
+      const res = await apiRespondInvite({ data: { workspaceId: inv.id, accept } });
+      if (!res.ok) toast.error("Invitation introuvable (déjà traitée ?).");
+      else if (accept) toast.success(`Vous avez rejoint « ${inv.name} ».`);
+      else toast.message("Invitation refusée.");
+      void refresh();
+    } catch {
+      toast.error("Action impossible (réseau).");
+    } finally {
+      setActing(null);
+    }
+  }
+
+  if (!loaded || invites.length === 0) return null;
+
+  return (
+    <section className="space-y-3">
+      <h2 className="flex items-center gap-2 text-sm font-medium">
+        <Users className="size-4 text-accent" />
+        Invitations de groupe ({invites.length})
+      </h2>
+      <ul className="space-y-2">
+        {invites.map((inv) => (
+          <li key={inv.id}>
+            <Card className="space-y-2 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge tone="mid">Groupe</Badge>
+                <span className="text-sm font-medium">{inv.name}</span>
+              </div>
+              {inv.owner_name ? (
+                <p className="text-xs text-subtle">Invité par {inv.owner_name}</p>
+              ) : null}
+              <p className="text-xs text-muted">
+                En rejoignant, vous partagez et recevez les dossiers mis en commun dans ce groupe.
+              </p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button
+                  size="sm"
+                  onClick={() => void respond(inv, true)}
+                  disabled={acting === inv.id}
+                >
+                  Rejoindre
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void respond(inv, false)}
+                  disabled={acting === inv.id}
+                >
+                  Refuser
+                </Button>
+              </div>
+            </Card>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

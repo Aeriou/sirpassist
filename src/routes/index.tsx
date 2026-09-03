@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   ArrowRight,
@@ -23,6 +23,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { RiskBadge } from "@/components/risk-badge";
 import { formatShortDate } from "@/lib/format";
+import { apiListWorkspaces } from "@/lib/workspace-api";
 import { currentAuthor, dueSoon, selectWorkspace, useSipr, useWorkspaceAnomalies, useWorkspaceVisits } from "@/lib/store";
 import { DEMO_WORKSPACE_ID, visitLabel } from "@/lib/workspace";
 import { usePlan } from "@/lib/use-plan";
@@ -101,6 +102,8 @@ function Home() {
       ) : null}
 
       <ArchiveMenu />
+
+      {sessionUserId ? <MyGroups /> : null}
 
       <section className="min-w-0 space-y-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -270,6 +273,78 @@ function Home() {
         </div>
       </section>
     </div>
+  );
+}
+
+type WsRow = {
+  id: string;
+  name: string;
+  status: "active" | "invited" | "pending";
+  isOwner: boolean;
+};
+
+/** Groupes de l'utilisateur, sur l'Accueil — repère visuel + accès direct à la
+ *  gestion. Les invitations en attente se répondent dans /partages. */
+function MyGroups() {
+  const [rows, setRows] = useState<WsRow[]>([]);
+  useEffect(() => {
+    let alive = true;
+    const tick = () => {
+      apiListWorkspaces()
+        .then((r) => {
+          if (alive && r.ok) setRows(r.workspaces as WsRow[]);
+        })
+        .catch(() => {});
+    };
+    tick();
+    const t = window.setInterval(tick, 30_000);
+    return () => {
+      alive = false;
+      window.clearInterval(t);
+    };
+  }, []);
+
+  const active = rows.filter((w) => w.status === "active");
+  const waiting = rows.filter((w) => w.status !== "active").length;
+  if (active.length === 0 && waiting === 0) return null;
+
+  return (
+    <section className="space-y-2">
+      <div className="flex items-center justify-between">
+        <h2 className="flex items-center gap-2 font-display text-lg font-semibold">
+          <Users className="size-4 text-accent" />
+          Mes groupes
+        </h2>
+        <Link to="/compte" className="text-sm text-accent">
+          Gérer
+        </Link>
+      </div>
+      {active.length > 0 ? (
+        <ul className="flex flex-wrap gap-2">
+          {active.map((w) => (
+            <li key={w.id}>
+              <Link
+                to="/compte"
+                className="inline-flex items-center gap-2 rounded-full bg-surface px-3 py-1.5 text-sm shadow-[var(--shadow-border)] transition-[box-shadow] hover:shadow-[var(--shadow-border-hover)]"
+              >
+                {w.name}
+                {w.isOwner ? (
+                  <span className="text-xs text-subtle">propriétaire</span>
+                ) : null}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {waiting > 0 ? (
+        <p className="text-sm text-muted">
+          {waiting} invitation{waiting > 1 ? "s" : ""} en attente —{" "}
+          <Link to="/partages" className="text-accent">
+            répondre
+          </Link>
+        </p>
+      ) : null}
+    </section>
   );
 }
 

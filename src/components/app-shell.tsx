@@ -23,6 +23,7 @@ import { Field, Input } from "./ui/input";
 import { useOnline } from "@/lib/online";
 import { doSignOut } from "@/lib/auth/sign-out";
 import { apiShareInboxCount } from "@/lib/share-api";
+import { apiListMyInvites } from "@/lib/workspace-api";
 import { apiListPendingAccounts } from "@/lib/account-api";
 import { apiListSupportTickets } from "@/lib/support-api";
 import { TwoFactorCard } from "./two-factor-card";
@@ -275,9 +276,16 @@ function SharesLink() {
   useEffect(() => {
     let alive = true;
     const tick = () => {
-      apiShareInboxCount()
-        .then((r) => {
-          if (alive && r.ok) setCount(r.count);
+      // Partages de dossiers/constats + invitations de groupe : un seul compteur.
+      Promise.all([
+        apiShareInboxCount().catch(() => null),
+        apiListMyInvites().catch(() => null),
+      ])
+        .then(([shares, invites]) => {
+          if (!alive) return;
+          const s = shares && shares.ok ? shares.count : 0;
+          const i = invites && invites.ok ? invites.invites.length : 0;
+          setCount(s + i);
         })
         .catch(() => {
           /* réseau : on retentera */
@@ -290,7 +298,9 @@ function SharesLink() {
       window.clearInterval(t);
     };
   }, []);
-  return <IconLink to="/partages" count={count} label="Partages reçus" icon={Inbox} tone="warn" />;
+  return (
+    <IconLink to="/partages" count={count} label="Partages et invitations" icon={Inbox} tone="warn" />
+  );
 }
 
 function PendingAccountsLink() {
