@@ -7,14 +7,14 @@ import { emptyPlace } from "./place";
 export const CHARLEROI: GeoFix = {
   lat: 50.41082,
   lng: 4.44458,
-  address: "Rue de Montigny 42, 6000 Charleroi",
+  address: "Rue Quinexistepas 42, 6000 Charleroi",
   capturedAt: isoDate(),
 };
 
 export const LIEGE: GeoFix = {
   lat: 50.63256,
   lng: 5.57966,
-  address: "Rue de la Carrosserie 8, 4020 Liège",
+  address: "Rue Sanstole 8, 4020 Liège",
   capturedAt: isoDate(),
 };
 

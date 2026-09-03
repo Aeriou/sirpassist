@@ -92,7 +92,7 @@ export function DossierDialog({
               required
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder={independant ? "Garage Lambert, Atelier 3…" : "Atelier 3, Quai nord…"}
+              placeholder={independant ? "Garage Toutvabien, Atelier 3…" : "Atelier 3, Quai nord…"}
             />
           </Field>
           {independant ? (

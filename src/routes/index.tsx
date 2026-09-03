@@ -90,7 +90,7 @@ function Home() {
         <Card className="space-y-2">
           <p className="font-display font-semibold">Espace démo</p>
           <p className="text-sm text-muted">
-            Les exemples Van den Berg / Lambert partagent un PGP de démonstration. Enregistrez-vous
+            Les exemples Duquinexistepas / Toutvabien partagent un PGP de démonstration. Enregistrez-vous
             en entreprise (PGP commun au groupe) ou en indépendant (PGP personnel) pour isoler vos
             remarques.
           </p>

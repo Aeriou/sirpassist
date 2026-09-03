@@ -301,7 +301,7 @@ function VisitDetail() {
               <Input
                 value={infoDraft.name}
                 onChange={(e) => setInfoDraft({ ...infoDraft, name: e.target.value })}
-                placeholder="Atelier 3 Charleroi"
+                placeholder="Atelier de démonstration"
               />
             </Field>
             <Field label="Entreprise visée">

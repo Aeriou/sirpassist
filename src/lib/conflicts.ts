@@ -38,9 +38,9 @@ export function seedConflicts(): DataConflict[] {
       entityId: "ano-cable",
       title: "Câble dénudé — prise atelier 3",
       subtitle: "Constat terrain vs mise à jour bureau (Kinney + suivi PGP)",
-      localBy: "Camille Dubois · N3 terrain",
+      localBy: "Prudence Ducasque · N3 terrain",
       localAt: addDays(today, 0) + "T07:52:00.000Z",
-      remoteBy: "Jean Van den Berg · N1 bureau",
+      remoteBy: "Roger Duchantier · N1 bureau",
       remoteAt: addDays(today, 0) + "T10:18:00.000Z",
       status: "ouvert",
       fields: [
@@ -64,7 +64,7 @@ export function seedConflicts(): DataConflict[] {
         {
           key: "assignedTo",
           label: "Responsable",
-          local: "Marc Lemoine",
+          local: "Theo Ducontact",
           remote: "Service électricité externe",
           recommend: "remote",
           reason: "Le N1 a attribué l'intervenant habilité.",
@@ -85,9 +85,9 @@ export function seedConflicts(): DataConflict[] {
       entityId: "ano-issue",
       title: "Issue de secours obstruée",
       subtitle: "Photo CBE encore bloquée vs clôture bureau",
-      localBy: "Camille Dubois · N3 terrain",
+      localBy: "Prudence Ducasque · N3 terrain",
       localAt: addDays(today, 0) + "T08:04:00.000Z",
-      remoteBy: "Marc Lemoine · chef d'atelier",
+      remoteBy: "Theo Ducontact · chef d'atelier",
       remoteAt: addDays(today, 0) + "T09:40:00.000Z",
       status: "ouvert",
       fields: [
@@ -125,9 +125,9 @@ export function seedConflicts(): DataConflict[] {
       entityId: "paa-solvant",
       title: "Fût de solvant sans extraction",
       subtitle: "Ligne PAA : budget et trimestre divergents",
-      localBy: "Camille Dubois · N2 terrain",
+      localBy: "Prudence Ducasque · N2 terrain",
       localAt: addDays(today, -1) + "T16:20:00.000Z",
-      remoteBy: "Jean Van den Berg · employeur",
+      remoteBy: "Roger Duchantier · employeur",
       remoteAt: addDays(today, 0) + "T08:10:00.000Z",
       status: "ouvert",
       fields: [
@@ -142,7 +142,7 @@ export function seedConflicts(): DataConflict[] {
         {
           key: "owner",
           label: "Responsable",
-          local: "Sophie Lambert",
+          local: "Manon Tolebosse",
           remote: "SIPP interne",
           recommend: "local",
           reason: "La gérante du site reste l'exécutant ; le SIPP assure le suivi.",

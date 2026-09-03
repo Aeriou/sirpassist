@@ -375,7 +375,7 @@ export const useSipr = create<State>()(
             ? get().ackedReminders
             : [...get().ackedReminders, id],
         }),
-      resolveConflict: (id, mode, picks, by = "Camille Dubois") => {
+      resolveConflict: (id, mode, picks, by = "Prudence Ducasque") => {
         const c = get().conflicts.find((x) => x.id === id);
         if (!c || c.status === "resolu") return;
         const chosen = mergePicks(c, mode, picks);

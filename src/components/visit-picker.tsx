@@ -34,7 +34,7 @@ export function VisitPicker({
         <Input
           value={name}
           autoComplete="off"
-          placeholder="Ex. Atelier 3 Charleroi"
+          placeholder="Ex. Atelier de démonstration"
           onChange={(e) => {
             onNameChange(e.target.value);
             setOpen(true);

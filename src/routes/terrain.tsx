@@ -100,7 +100,7 @@ function Terrain() {
                   required
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder="Atelier 3, Garage Lambert…"
+                  placeholder="Atelier 3, Garage Toutvabien…"
                 />
               </Field>
               <PlaceEditor value={place} onChange={setPlace} />
