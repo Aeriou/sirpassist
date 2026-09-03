@@ -14,6 +14,7 @@ import { DEMO_WORKSPACE_ID } from "./workspace";
 import { mergeById, mergeDeleted } from "./cloud-sync";
 import type {
   Anomaly,
+  Classeur,
   DeletedIds,
   FdsNotice,
   PgpPlan,
@@ -33,6 +34,7 @@ export type UserSnapshot = {
   anomalies: Anomaly[];
   fds: FdsNotice[];
   rps: RpsSituation[];
+  classeurs: Classeur[];
   pgpByWorkspace: Record<string, PgpPlan>;
   ackedReminders: string[];
   tickets: SupportTicket[];
@@ -46,6 +48,7 @@ type BuildState = {
   anomalies: Anomaly[];
   fds: FdsNotice[];
   rps: RpsSituation[];
+  classeurs: Classeur[];
   pgpByWorkspace: Record<string, PgpPlan>;
   ackedReminders: string[];
   tickets: SupportTicket[];
@@ -76,6 +79,7 @@ export function buildUserSnapshot(state: BuildState): UserSnapshot {
     }),
     fds: realOnly(state.fds),
     rps: realOnly(state.rps),
+    classeurs: realOnly(state.classeurs),
     pgpByWorkspace,
     ackedReminders: state.ackedReminders,
     tickets: state.tickets,
@@ -98,6 +102,7 @@ export type ApplyPatch = Partial<
     | "anomalies"
     | "fds"
     | "rps"
+    | "classeurs"
     | "pgpByWorkspace"
     | "pgp"
     | "ackedReminders"
@@ -123,6 +128,7 @@ export function applyUserSnapshot(
   const anomalies = mergeById(state.anomalies, snap.anomalies ?? [], deleted.anomalies);
   const fds = mergeById(state.fds, snap.fds ?? [], deleted.fds);
   const rps = mergeById(state.rps, snap.rps ?? [], deleted.rps);
+  const classeurs = mergeById(state.classeurs, snap.classeurs ?? []);
   const workspaces = mergeById(state.workspaces, snap.workspaces ?? []);
   const tickets = mergeById(state.tickets, snap.tickets ?? []);
 
@@ -145,6 +151,7 @@ export function applyUserSnapshot(
     anomalies,
     fds,
     rps,
+    classeurs,
     pgpByWorkspace,
     pgp,
     ackedReminders,

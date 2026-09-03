@@ -10,6 +10,7 @@ import { RpsCard } from "@/components/rps-card";
 import { PlaceEditor } from "@/components/place-editor";
 import { ShareButton } from "@/components/share-button";
 import { ShareNotes } from "@/components/share-notes";
+import { ClasseurPicker } from "@/components/classeur-picker";
 import { SiblingMergeButton } from "@/components/sibling-merge-button";
 import { SignaturePad } from "@/components/signature-pad";
 import { Button } from "@/components/ui/button";
@@ -215,6 +216,8 @@ function VisitDetail() {
           </div>
         </div>
       </header>
+
+      <ClasseurPicker visitId={visit.id} />
 
       {visit.signatures && visit.signatures.length > 0 ? (
         <p className="text-xs text-muted">

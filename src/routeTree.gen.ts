@@ -24,6 +24,7 @@ import { Route as SupportRouteImport } from './routes/support'
 import { Route as TableauRouteImport } from './routes/tableau'
 import { Route as TerrainRouteImport } from './routes/terrain'
 import { Route as AnomalieIdRouteImport } from './routes/anomalie.$id'
+import { Route as ClasseurIdRouteImport } from './routes/classeur.$id'
 import { Route as FdsIndexRouteImport } from './routes/fds.index'
 import { Route as FdsIdRouteImport } from './routes/fds.$id'
 import { Route as RapportIdRouteImport } from './routes/rapport.$id'
@@ -109,6 +110,11 @@ const AnomalieIdRoute = AnomalieIdRouteImport.update({
   path: '/anomalie/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ClasseurIdRoute = ClasseurIdRouteImport.update({
+  id: '/classeur/$id',
+  path: '/classeur/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FdsIndexRoute = FdsIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -171,6 +177,7 @@ export interface FileRoutesByFullPath {
   '/tableau': typeof TableauRoute
   '/terrain': typeof TerrainRoute
   '/anomalie/$id': typeof AnomalieIdRoute
+  '/classeur/$id': typeof ClasseurIdRoute
   '/fds/$id': typeof FdsIdRoute
   '/rapport/$id': typeof RapportIdRoute
   '/rps/$id': typeof RpsIdRoute
@@ -194,6 +201,7 @@ export interface FileRoutesByTo {
   '/tableau': typeof TableauRoute
   '/terrain': typeof TerrainRoute
   '/anomalie/$id': typeof AnomalieIdRoute
+  '/classeur/$id': typeof ClasseurIdRoute
   '/fds/$id': typeof FdsIdRoute
   '/rapport/$id': typeof RapportIdRoute
   '/rps/$id': typeof RpsIdRoute
@@ -221,6 +229,7 @@ export interface FileRoutesById {
   '/tableau': typeof TableauRoute
   '/terrain': typeof TerrainRoute
   '/anomalie/$id': typeof AnomalieIdRoute
+  '/classeur/$id': typeof ClasseurIdRoute
   '/fds/$id': typeof FdsIdRoute
   '/rapport/$id': typeof RapportIdRoute
   '/rps/$id': typeof RpsIdRoute
@@ -249,6 +258,7 @@ export interface FileRouteTypes {
     | '/tableau'
     | '/terrain'
     | '/anomalie/$id'
+    | '/classeur/$id'
     | '/fds/$id'
     | '/rapport/$id'
     | '/rps/$id'
@@ -272,6 +282,7 @@ export interface FileRouteTypes {
     | '/tableau'
     | '/terrain'
     | '/anomalie/$id'
+    | '/classeur/$id'
     | '/fds/$id'
     | '/rapport/$id'
     | '/rps/$id'
@@ -298,6 +309,7 @@ export interface FileRouteTypes {
     | '/tableau'
     | '/terrain'
     | '/anomalie/$id'
+    | '/classeur/$id'
     | '/fds/$id'
     | '/rapport/$id'
     | '/rps/$id'
@@ -325,6 +337,7 @@ export interface RootRouteChildren {
   TableauRoute: typeof TableauRoute
   TerrainRoute: typeof TerrainRoute
   AnomalieIdRoute: typeof AnomalieIdRoute
+  ClasseurIdRoute: typeof ClasseurIdRoute
   RapportIdRoute: typeof RapportIdRoute
   VisiteIdRoute: typeof VisiteIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -436,6 +449,13 @@ declare module '@tanstack/react-router' {
       path: '/anomalie/$id'
       fullPath: '/anomalie/$id'
       preLoaderRoute: typeof AnomalieIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/classeur/$id': {
+      id: '/classeur/$id'
+      path: '/classeur/$id'
+      fullPath: '/classeur/$id'
+      preLoaderRoute: typeof ClasseurIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/fds/': {
@@ -555,6 +575,7 @@ const rootRouteChildren: RootRouteChildren = {
   TableauRoute: TableauRoute,
   TerrainRoute: TerrainRoute,
   AnomalieIdRoute: AnomalieIdRoute,
+  ClasseurIdRoute: ClasseurIdRoute,
   RapportIdRoute: RapportIdRoute,
   VisiteIdRoute: VisiteIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,

@@ -16,6 +16,7 @@ import { ArchiveMenu } from "@/components/archive-menu";
 import { AnomalyCard } from "@/components/anomaly-card";
 import { Photo } from "@/components/photo";
 import { DeleteIconButton } from "@/components/confirm-delete";
+import { ClasseursHome } from "@/components/classeurs-home";
 import { DossierDialog } from "@/components/dossier-dialog";
 import { PlanBanner } from "@/components/plan-banner";
 import { Button } from "@/components/ui/button";
@@ -121,6 +122,9 @@ function Home() {
             {independant ? "Nouveau client" : "Nouveau dossier"}
           </Button>
         </div>
+
+        {sessionUserId ? <ClasseursHome /> : null}
+
         {inProgress.length > 4 ? (
           <Input
             value={query}

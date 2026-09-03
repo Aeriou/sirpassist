@@ -5,6 +5,7 @@ import type {
   AccountKind,
   Anomaly,
   AnomalyStatus,
+  Classeur,
   DeletedIds,
   FdsNotice,
   PaaLine,
@@ -113,6 +114,17 @@ type State = {
   deleted: DeletedIds;
   addTicket: (t: SupportTicket) => void;
   patchTicket: (id: string, patch: Partial<SupportTicket>) => void;
+  classeurs: Classeur[];
+  addClasseur: (input: { name: string; note?: string }) => string;
+  updateClasseur: (id: string, patch: Partial<Pick<Classeur, "name" | "note">>) => void;
+  removeClasseur: (id: string) => void;
+  setClasseurItem: (
+    id: string,
+    kind: "visit" | "anomaly",
+    itemId: string,
+    on: boolean,
+  ) => void;
+  setClasseurGroups: (id: string, groupIds: string[]) => void;
 };
 
 const memoryStorage: StateStorage = {
@@ -184,6 +196,7 @@ function demo() {
     sessionUserId: null as string | null,
     tickets: [] as SupportTicket[],
     deleted: emptyDeleted(),
+    classeurs: [] as Classeur[],
   };
 }
 
@@ -448,6 +461,7 @@ export const useSipr = create<State>()(
           pgp: keptPgp[nextActive] ?? d.pgp,
           tickets: get().tickets,
           deleted: get().deleted,
+          classeurs: get().classeurs.filter((c) => !c.demo),
         });
       },
       addUser: (u, opts) => {
@@ -663,6 +677,19 @@ export const useSipr = create<State>()(
           anomalies: anomalies.filter((a) => visitWorkspaceId(a) !== id),
           fds: fds.filter((f) => visitWorkspaceId(f) !== id),
           rps: rps.filter((r) => visitWorkspaceId(r) !== id),
+          classeurs: get()
+            .classeurs.filter((c) => c.workspaceId !== id)
+            .map((c) =>
+              c.sharedGroupIds?.includes(id)
+                ? {
+                    ...c,
+                    sharedGroupIds:
+                      c.sharedGroupIds.filter((g) => g !== id).length > 0
+                        ? c.sharedGroupIds.filter((g) => g !== id)
+                        : undefined,
+                  }
+                : c,
+            ),
         });
         if (!nextWs.length) {
           // Dernier espace supprimé : on crée un espace VIDE plutôt que de
@@ -765,6 +792,7 @@ export const useSipr = create<State>()(
               anomalies: s.anomalies,
               fds: s.fds,
               rps: s.rps,
+              classeurs: s.classeurs,
               pgpByWorkspace: s.pgpByWorkspace,
               ackedReminders: s.ackedReminders,
               tickets: s.tickets,
@@ -991,6 +1019,60 @@ export const useSipr = create<State>()(
         set({
           tickets: get().tickets.map((x) => (x.id === id ? { ...x, ...patch } : x)),
         }),
+      addClasseur: (input) => {
+        const id = uid("classeur");
+        const now = isoDate();
+        const c: Classeur = {
+          id,
+          workspaceId: get().activeWorkspaceId,
+          name: input.name.trim() || "Classeur",
+          note: input.note?.trim() || undefined,
+          visitIds: [],
+          anomalyIds: [],
+          createdAt: now,
+          updatedAt: now,
+        };
+        set({ classeurs: [c, ...get().classeurs] });
+        return id;
+      },
+      updateClasseur: (id, patch) =>
+        set({
+          classeurs: get().classeurs.map((c) =>
+            c.id === id
+              ? {
+                  ...c,
+                  ...("name" in patch ? { name: patch.name?.trim() || c.name } : {}),
+                  ...("note" in patch ? { note: patch.note?.trim() || undefined } : {}),
+                  updatedAt: isoDate(),
+                }
+              : c,
+          ),
+        }),
+      removeClasseur: (id) =>
+        set({ classeurs: get().classeurs.filter((c) => c.id !== id) }),
+      setClasseurItem: (id, kind, itemId, on) =>
+        set({
+          classeurs: get().classeurs.map((c) => {
+            if (c.id !== id) return c;
+            const key = kind === "visit" ? "visitIds" : "anomalyIds";
+            const cur = c[key];
+            const next = on
+              ? cur.includes(itemId)
+                ? cur
+                : [...cur, itemId]
+              : cur.filter((x) => x !== itemId);
+            if (next === cur) return c;
+            return { ...c, [key]: next, updatedAt: isoDate() };
+          }),
+        }),
+      setClasseurGroups: (id, groupIds) =>
+        set({
+          classeurs: get().classeurs.map((c) =>
+            c.id === id
+              ? { ...c, sharedGroupIds: groupIds.length ? groupIds : undefined, updatedAt: isoDate() }
+              : c,
+          ),
+        }),
     }),
     {
       name: "siprassist-v5",
@@ -1073,6 +1155,14 @@ export const useSipr = create<State>()(
             totpBackupHashes: u.totpBackupHashes,
           };
         });
+        const classeurs = ((p as { classeurs?: Classeur[] }).classeurs ?? fresh.classeurs).map(
+          (c) => ({
+            ...c,
+            visitIds: Array.isArray(c.visitIds) ? c.visitIds : [],
+            anomalyIds: Array.isArray(c.anomalyIds) ? c.anomalyIds : [],
+            workspaceId: c.workspaceId || activeWorkspaceId,
+          }),
+        );
         return {
           ...current, // méthodes du store
           ...fresh, // valeurs par défaut propres (remet à zéro les tranches non persistées pour cette clé)
@@ -1089,6 +1179,7 @@ export const useSipr = create<State>()(
           sessionUserId: p.sessionUserId ?? null,
           tickets: p.tickets ?? fresh.tickets ?? [],
           deleted: mergeDeleted(fresh.deleted, (p as { deleted?: DeletedIds }).deleted),
+          classeurs,
         };
       },
       storage: createJSONStorage(() =>
@@ -1110,6 +1201,7 @@ export const useSipr = create<State>()(
         sessionUserId: s.sessionUserId,
         tickets: s.tickets,
         deleted: s.deleted,
+        classeurs: s.classeurs,
       }),
     },
   ),
@@ -1141,6 +1233,12 @@ export function useWorkspaceRps() {
   const rps = useSipr((s) => s.rps);
   const id = useSipr((s) => s.activeWorkspaceId);
   return rps.filter((r) => visitWorkspaceId(r) === id);
+}
+
+export function useWorkspaceClasseurs() {
+  const classeurs = useSipr((s) => s.classeurs);
+  const id = useSipr((s) => s.activeWorkspaceId);
+  return classeurs.filter((c) => (c.workspaceId || id) === id);
 }
 
 export function useActiveVisit() {

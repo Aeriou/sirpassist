@@ -148,6 +148,27 @@ export type Visit = {
   shareNotes?: ShareNote[];
 };
 
+/**
+ * Classeur : regroupe plusieurs visites (« dossiers ») et/ou des constats isolés
+ * sous un même nom. Sert à organiser l'Accueil et à partager un ensemble d'un
+ * coup avec un groupe (lecture seule côté membres).
+ */
+export type Classeur = {
+  id: string;
+  workspaceId: string;
+  name: string;
+  note?: string;
+  /** Visites entières rangées dans ce classeur (tous leurs constats suivent). */
+  visitIds: string[];
+  /** Constats piochés hors de leur visite. */
+  anomalyIds: string[];
+  createdAt: string;
+  updatedAt: string;
+  /** Espaces de groupe avec lesquels ce classeur est partagé. */
+  sharedGroupIds?: string[];
+  demo?: boolean;
+};
+
 export type Anomaly = {
   id: string;
   visitId: string;
