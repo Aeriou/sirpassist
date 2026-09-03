@@ -249,5 +249,26 @@ check("après acceptation -> boîte d'invitations vide", (await wdb.listMyInvite
 const acceptTwice = await wdb.respondInvite(sql, { workspaceId: created.id, userId: "user_col", accept: true });
 check("on ne répond pas 2x à une invitation -> not_found", acceptTwice.ok === false);
 
+// --- suppression du groupe (propriétaire uniquement) ---
+const delByMember = await wdb.deleteWorkspace(sql, { workspaceId: created.id, userId: "user_col" });
+check("un membre ne peut pas supprimer le groupe -> forbidden", delByMember.ok === false && delByMember.reason === "forbidden");
+
+const delByStranger = await wdb.deleteWorkspace(sql, { workspaceId: created.id, userId: STRANGER });
+check("un étranger ne peut pas supprimer le groupe -> forbidden", delByStranger.ok === false);
+
+const memberCountBefore = await sql`select count(*)::int as n from workspace_member where workspace_id = ${created.id}`;
+check("avant suppression : le groupe a des membres", (memberCountBefore[0] as { n: number }).n > 0);
+
+const delOk = await wdb.deleteWorkspace(sql, { workspaceId: created.id, userId: OWNER });
+check("le propriétaire supprime le groupe", delOk.ok === true);
+
+check("après suppression : le propriétaire ne voit plus le groupe", (await wdb.listMyWorkspaces(sql, OWNER)).every((w) => w.id !== created.id));
+check("après suppression : plus aucune appartenance", (await wdb.myMembership(sql, created.id, "user_col")).status === null);
+const memberCountAfter = await sql`select count(*)::int as n from workspace_member where workspace_id = ${created.id}`;
+check("après suppression : membres partis en cascade", (memberCountAfter[0] as { n: number }).n === 0);
+
+const delMissing = await wdb.deleteWorkspace(sql, { workspaceId: created.id, userId: OWNER });
+check("suppression d'un groupe déjà supprimé -> forbidden (introuvable)", delMissing.ok === false);
+
 console.log(failures === 0 ? "\n✅ tous les contrôles passent" : `\n❌ ${failures} échec(s)`);
 process.exit(failures === 0 ? 0 : 1);

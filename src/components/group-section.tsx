@@ -7,6 +7,7 @@ import {
   apiCancelJoinRequest,
   apiCreateWorkspace,
   apiDecideJoin,
+  apiDeleteWorkspace,
   apiInviteMember,
   apiListJoinRequests,
   apiListMembers,
@@ -17,9 +18,11 @@ import {
   apiRespondInvite,
   apiRevokeInvite,
 } from "@/lib/workspace-api";
+import { ConfirmDelete } from "@/components/confirm-delete";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Field, Input, NativeSelect } from "@/components/ui/input";
+import { useSipr } from "@/lib/store";
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
@@ -291,6 +294,8 @@ function GroupCard({ group, onChange }: { group: Group; onChange: () => Promise<
   const [members, setMembers] = useState<Member[]>([]);
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const removeWorkspaceLocal = useSipr((s) => s.removeWorkspace);
   const timer = useRef<number | null>(null);
 
   const loadGroupData = useCallback(async () => {
@@ -379,6 +384,24 @@ function GroupCard({ group, onChange }: { group: Group; onChange: () => Promise<
       } else {
         toast.error("Action impossible.");
       }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteGroup() {
+    setBusy(true);
+    try {
+      const res = await apiDeleteWorkspace({ data: { workspaceId: group.id } });
+      if (res.ok) {
+        removeWorkspaceLocal(group.id);
+        toast.success(`Groupe « ${group.name} » supprimé.`);
+        await onChange();
+      } else {
+        toast.error("Suppression impossible (vous n'êtes pas propriétaire ?).");
+      }
+    } catch {
+      toast.error("Suppression impossible (réseau).");
     } finally {
       setBusy(false);
     }
@@ -511,6 +534,37 @@ function GroupCard({ group, onChange }: { group: Group; onChange: () => Promise<
         </Link>{" "}
         ou la fiche d'un classeur.
       </p>
+
+      {group.isOwner ? (
+        <div className="space-y-2 border-t border-border pt-3">
+          <p className="text-xs font-medium tracking-wide text-danger">Zone sensible</p>
+          <p className="text-xs text-muted">
+            Supprimer le groupe retire à tous les membres l'accès aux classeurs mis en commun.
+            Les classeurs restent chez chacun dans son propre compte — mais si un membre veut
+            garder une copie d'un classeur d'un autre, il doit d'abord l'« Importer dans mes
+            dossiers » (section « Classeurs reçus du groupe »).
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="text-danger"
+            disabled={busy}
+            onClick={() => setDeleteOpen(true)}
+          >
+            Supprimer le groupe
+          </Button>
+        </div>
+      ) : null}
+
+      <ConfirmDelete
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title={`Supprimer le groupe « ${group.name} » ?`}
+        description="Définitif. Les membres perdent l'accès aux classeurs mis en commun et le groupe disparaît pour tout le monde. Vos propres dossiers et classeurs ne sont pas touchés."
+        confirmLabel="Supprimer le groupe"
+        onConfirm={() => void deleteGroup()}
+      />
     </Card>
   );
 }

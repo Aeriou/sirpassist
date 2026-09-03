@@ -125,6 +125,13 @@ type State = {
     on: boolean,
   ) => void;
   setClasseurGroups: (id: string, groupIds: string[]) => void;
+  importGroupClasseur: (input: {
+    name: string;
+    note?: string;
+    visits: Visit[];
+    anomalies: Anomaly[];
+    from?: string;
+  }) => { classeurId: string };
 };
 
 const memoryStorage: StateStorage = {
@@ -157,6 +164,10 @@ const DEMO_IDS = new Set([
 export function isExample(id: string, demo?: boolean) {
   return demo === true || DEMO_IDS.has(id);
 }
+
+/** Étiquette « — partagé par X » / « — retour de X » / « — repris de X » en
+ *  fin de nom, à retirer avant d'en réappliquer une (pas d'empilement). */
+const SHARE_TAG_RE = /\s+—\s+(?:partagé par|retour de|repris de|repris du groupe).*$/u;
 
 function demoAuthor(): RecordAuthor {
   return {
@@ -924,7 +935,6 @@ export const useSipr = create<State>()(
         // Étiquette pour distinguer une copie partagée d'un dossier à soi (et un
         // retour d'un premier envoi). On retire d'abord une étiquette existante
         // pour ne pas les empiler au fil des allers-retours.
-        const SHARE_TAG_RE = /\s+—\s+(?:partagé par|retour de)\s+.+$/u;
         const suffix = opts.isReturn ? ` — retour de ${from}` : ` — partagé par ${from}`;
         const label = (raw: string, fallback: string) =>
           `${(raw || fallback).replace(SHARE_TAG_RE, "").trim()}${suffix}`;
@@ -1085,6 +1095,87 @@ export const useSipr = create<State>()(
               : c,
           ),
         }),
+      importGroupClasseur: (input) => {
+        const st = get();
+        let wsId = st.activeWorkspaceId;
+        if (wsId === DEMO_WORKSPACE_ID) {
+          const owned = st.workspaces.filter((w) => w.id !== DEMO_WORKSPACE_ID);
+          wsId =
+            owned[0]?.id ??
+            get().createWorkspace({ kind: "independant", name: "Mon espace" }).id;
+        }
+        const now = isoDate();
+        const tag = input.from ? ` — repris de ${input.from}` : " — repris du groupe";
+
+        const idMap = new Map<string, string>();
+        const newVisits: Visit[] = input.visits.map((v) => {
+          const nid = uid("visit");
+          idMap.set(v.id, nid);
+          return {
+            ...v,
+            id: nid,
+            workspaceId: wsId,
+            status: "en_cours",
+            demo: undefined,
+            signatures: undefined,
+            shareOriginId: undefined,
+            sharedThreadId: undefined,
+            sharedFrom: input.from,
+          };
+        });
+
+        // Constats rattachés à une visite non reprise (piochés hors visite) :
+        // on les regroupe dans une visite « Constats repris ».
+        const orphans = input.anomalies.filter((a) => !idMap.has(a.visitId));
+        let orphanVisitId: string | null = null;
+        if (orphans.length) {
+          orphanVisitId = uid("visit");
+          newVisits.push({
+            id: orphanVisitId,
+            name: `Constats repris${tag}`,
+            company: "",
+            site: "",
+            interlocutor: "",
+            date: now.slice(0, 10),
+            status: "en_cours",
+            workspaceId: wsId,
+            sharedFrom: input.from,
+          });
+        }
+
+        const newAnomalies: Anomaly[] = input.anomalies.map((a) => ({
+          ...a,
+          id: uid("ano"),
+          visitId: idMap.get(a.visitId) ?? orphanVisitId ?? newVisits[0]!.id,
+          workspaceId: wsId,
+          createdAt: a.createdAt || now,
+          status: a.status ?? "ouverte",
+          demo: undefined,
+          shareOriginId: undefined,
+          sharedThreadId: undefined,
+          sharedFrom: input.from,
+        }));
+
+        const classeurId = uid("classeur");
+        const classeur: Classeur = {
+          id: classeurId,
+          workspaceId: wsId,
+          name: `${(input.name || "Classeur").trim().replace(SHARE_TAG_RE, "")}${tag}`,
+          note: input.note?.trim() || undefined,
+          visitIds: newVisits.map((v) => v.id),
+          anomalyIds: [],
+          createdAt: now,
+          updatedAt: now,
+        };
+
+        set({
+          visits: [...newVisits, ...st.visits],
+          anomalies: [...newAnomalies, ...st.anomalies],
+          classeurs: [classeur, ...st.classeurs],
+        });
+        if (get().activeWorkspaceId !== wsId) get().switchWorkspace(wsId);
+        return { classeurId };
+      },
     }),
     {
       name: "siprassist-v5",

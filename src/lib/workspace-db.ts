@@ -350,6 +350,23 @@ export async function removeMember(
   return { ok: true };
 }
 
+/**
+ * Suppression complète d'un groupe — propriétaire uniquement. Les membres, le
+ * snapshot et les classeurs mis en commun partent en cascade (FK). Les
+ * classeurs restent chez chaque membre dans son propre compte : seul le
+ * partage vers le groupe disparaît.
+ */
+export async function deleteWorkspace(
+  sql: Sql,
+  input: { workspaceId: string; userId: string },
+): Promise<{ ok: false; reason: "forbidden" } | { ok: true }> {
+  if (!(await isOwner(sql, input.workspaceId, input.userId))) {
+    return { ok: false, reason: "forbidden" };
+  }
+  await sql`delete from workspace where id = ${input.workspaceId}`;
+  return { ok: true };
+}
+
 export async function myMembership(
   sql: Sql,
   workspaceId: string,

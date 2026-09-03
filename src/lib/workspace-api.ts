@@ -146,6 +146,14 @@ export const apiRemoveMember = createServerFn({ method: "POST" })
     });
   });
 
+export const apiDeleteWorkspace = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { workspaceId: string }) => ({ workspaceId: vReqStr(input.workspaceId, 64) }))
+  .handler(async ({ data, context }) => {
+    const sql = await getSqlClient();
+    return wdb.deleteWorkspace(sql, { workspaceId: data.workspaceId, userId: context.userId });
+  });
+
 export const apiMyMembership = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((input: { workspaceId: string }) => ({ workspaceId: vReqStr(input.workspaceId, 64) }))

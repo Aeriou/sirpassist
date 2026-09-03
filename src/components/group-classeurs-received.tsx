@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "@tanstack/react-router";
-import { FolderOpen, Layers } from "lucide-react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { toast } from "sonner";
+import { Download, FolderOpen, Layers } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Photo } from "@/components/photo";
 import { RiskBadge } from "@/components/risk-badge";
@@ -9,6 +11,7 @@ import { apiListWorkspaces } from "@/lib/workspace-api";
 import { apiListGroupClasseurs, type SharedClasseurView } from "@/lib/group-classeur-api";
 import { isGroupClasseurPayload } from "@/lib/group-classeur-payload";
 import { formatShortDate, formatStamp } from "@/lib/format";
+import { useSipr } from "@/lib/store";
 import { visitLabel } from "@/lib/workspace";
 import type { Anomaly } from "@/lib/types";
 
@@ -109,6 +112,8 @@ function ConstatRow({ a }: { a: Anomaly }) {
 
 function SharedClasseurCard({ row }: { row: SharedClasseurView }) {
   const [open, setOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const navigate = useNavigate();
   let parsed: unknown = null;
   try {
     parsed = JSON.parse(row.payloadJson);
@@ -116,6 +121,26 @@ function SharedClasseurCard({ row }: { row: SharedClasseurView }) {
     parsed = null;
   }
   const payload = isGroupClasseurPayload(parsed) ? parsed : null;
+
+  function importCopy() {
+    if (!payload || importing) return;
+    setImporting(true);
+    try {
+      const { classeurId } = useSipr.getState().importGroupClasseur({
+        name: row.name || "Classeur",
+        note: payload.note,
+        visits: payload.visits,
+        anomalies: payload.anomalies,
+        from: row.sharedByMe ? undefined : row.sharedByName || undefined,
+      });
+      toast.success("Classeur repris dans vos dossiers.");
+      navigate({ to: "/classeur/$id", params: { id: classeurId } });
+    } catch {
+      toast.error("Reprise impossible.");
+    } finally {
+      setImporting(false);
+    }
+  }
 
   return (
     <Card className="space-y-2 p-3">
@@ -138,6 +163,19 @@ function SharedClasseurCard({ row }: { row: SharedClasseurView }) {
           {payload ? `${payload.visits.length} visite${payload.visits.length > 1 ? "s" : ""}` : "—"}
         </Badge>
       </button>
+
+      {payload && !row.sharedByMe ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={importing}
+          onClick={importCopy}
+        >
+          <Download className="size-4" />
+          Importer dans mes dossiers
+        </Button>
+      ) : null}
 
       {open && payload ? (
         <div className="space-y-3 border-t border-border pt-3">
