@@ -505,7 +505,11 @@ function GroupCard({ group, onChange }: { group: Group; onChange: () => Promise<
       </div>
 
       <p className="text-xs text-subtle">
-        Partage des dossiers du groupe entre membres validés : prochaine mise à jour.
+        Chaque membre validé partage ses classeurs avec le groupe (lecture seule) depuis la fiche
+        du classeur.{" "}
+        <Link to="/classeurs-partages" className="text-accent">
+          Voir les classeurs partagés
+        </Link>
       </p>
     </Card>
   );

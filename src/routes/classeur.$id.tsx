@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { ArrowLeft, Check, FolderOpen, Pencil, Plus, X } from "lucide-react";
+import { ClasseurGroupShare } from "@/components/classeur-group-share";
 import { ConfirmDelete } from "@/components/confirm-delete";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -267,13 +268,7 @@ function ClasseurDetail() {
         )}
       </section>
 
-      <section className="space-y-2">
-        <h2 className="font-display text-lg font-semibold">Partage avec un groupe</h2>
-        <p className="rounded-xl bg-surface px-4 py-3 text-sm text-muted shadow-[var(--shadow-border)]">
-          Bientôt : mettre ce classeur en commun avec un groupe (les membres le voient en lecture
-          seule).
-        </p>
-      </section>
+      <ClasseurGroupShare classeurId={classeur.id} />
 
       <div>
         <Button variant="outline" className="text-danger" onClick={() => setDeleteOpen(true)}>

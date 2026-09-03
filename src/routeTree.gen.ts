@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ClasseursPartagesRouteImport } from './routes/classeurs-partages'
 import { Route as CompteRouteImport } from './routes/compte'
 import { Route as ConflitsRouteImport } from './routes/conflits'
 import { Route as ConnexionRouteImport } from './routes/connexion'
@@ -38,6 +39,11 @@ import { Route as ApiStripeWebhookRouteImport } from './routes/api/stripe/webhoo
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ClasseursPartagesRoute = ClasseursPartagesRouteImport.update({
+  id: '/classeurs-partages',
+  path: '/classeurs-partages',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CompteRoute = CompteRouteImport.update({
@@ -163,6 +169,7 @@ const ApiStripeWebhookRoute = ApiStripeWebhookRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/classeurs-partages': typeof ClasseursPartagesRoute
   '/compte': typeof CompteRoute
   '/conflits': typeof ConflitsRoute
   '/connexion': typeof ConnexionRoute
@@ -190,6 +197,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/classeurs-partages': typeof ClasseursPartagesRoute
   '/compte': typeof CompteRoute
   '/conflits': typeof ConflitsRoute
   '/connexion': typeof ConnexionRoute
@@ -215,6 +223,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/classeurs-partages': typeof ClasseursPartagesRoute
   '/compte': typeof CompteRoute
   '/conflits': typeof ConflitsRoute
   '/connexion': typeof ConnexionRoute
@@ -244,6 +253,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/classeurs-partages'
     | '/compte'
     | '/conflits'
     | '/connexion'
@@ -271,6 +281,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/classeurs-partages'
     | '/compte'
     | '/conflits'
     | '/connexion'
@@ -295,6 +306,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/classeurs-partages'
     | '/compte'
     | '/conflits'
     | '/connexion'
@@ -323,6 +335,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ClasseursPartagesRoute: typeof ClasseursPartagesRoute
   CompteRoute: typeof CompteRoute
   ConflitsRoute: typeof ConflitsRoute
   ConnexionRoute: typeof ConnexionRoute
@@ -351,6 +364,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/classeurs-partages': {
+      id: '/classeurs-partages'
+      path: '/classeurs-partages'
+      fullPath: '/classeurs-partages'
+      preLoaderRoute: typeof ClasseursPartagesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/compte': {
@@ -561,6 +581,7 @@ const SupportRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ClasseursPartagesRoute: ClasseursPartagesRoute,
   CompteRoute: CompteRoute,
   ConflitsRoute: ConflitsRoute,
   ConnexionRoute: ConnexionRoute,

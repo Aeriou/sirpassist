@@ -324,21 +324,28 @@ function MyGroups() {
         </Link>
       </div>
       {active.length > 0 ? (
-        <ul className="flex flex-wrap gap-2">
-          {active.map((w) => (
-            <li key={w.id}>
-              <Link
-                to="/compte"
-                className="inline-flex items-center gap-2 rounded-full bg-surface px-3 py-1.5 text-sm shadow-[var(--shadow-border)] transition-[box-shadow] hover:shadow-[var(--shadow-border-hover)]"
-              >
-                {w.name}
-                {w.isOwner ? (
-                  <span className="text-xs text-subtle">propriétaire</span>
-                ) : null}
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="flex flex-wrap gap-2">
+            {active.map((w) => (
+              <li key={w.id}>
+                <Link
+                  to="/compte"
+                  className="inline-flex items-center gap-2 rounded-full bg-surface px-3 py-1.5 text-sm shadow-[var(--shadow-border)] transition-[box-shadow] hover:shadow-[var(--shadow-border-hover)]"
+                >
+                  {w.name}
+                  {w.isOwner ? (
+                    <span className="text-xs text-subtle">propriétaire</span>
+                  ) : null}
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <p className="text-sm">
+            <Link to="/classeurs-partages" className="text-accent">
+              Voir les classeurs partagés dans mes groupes
+            </Link>
+          </p>
+        </>
       ) : null}
       {waiting > 0 ? (
         <p className="text-sm text-muted">

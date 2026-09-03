@@ -88,6 +88,7 @@ export async function purgeUserData(sql: Sql, userId: string): Promise<void> {
     delete from workspace_snapshot
     where workspace_id in (select id from workspace where owner_user_id = ${userId})
   `;
+  await sql`delete from group_classeur where shared_by = ${userId}`;
   await sql`delete from workspace where owner_user_id = ${userId}`;
   await sql`delete from workspace_member where user_id = ${userId}`;
   await sql`delete from share_offer where from_user_id = ${userId} or to_user_id = ${userId}`;

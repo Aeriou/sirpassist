@@ -50,6 +50,7 @@ for (const m of [
   "0007_user_store.sql",
   "0008_account_approval.sql",
   "0009_user_asset.sql",
+  "0014_group_classeur.sql",
 ]) {
   pg.exec(readFileSync(join(root, "migrations", m), "utf8"));
 }
