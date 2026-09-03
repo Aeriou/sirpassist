@@ -21,7 +21,7 @@ import type {
 } from "./types";
 
 export function emptyDeleted(): DeletedIds {
-  return { visits: [], anomalies: [], fds: [], rps: [], paa: [] };
+  return { visits: [], anomalies: [], fds: [], rps: [], paa: [], classeurs: [] };
 }
 
 export function rememberIds(list: string[], ids: string[]): string[] {

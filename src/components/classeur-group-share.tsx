@@ -8,15 +8,18 @@ import {
   apiShareClasseurToGroup,
   apiUnshareClasseurFromGroup,
 } from "@/lib/group-classeur-api";
-import { buildGroupClasseurPayload } from "@/lib/group-classeur-payload";
+import {
+  buildGroupClasseurPayload,
+  type GroupClasseurPayload,
+} from "@/lib/group-classeur-payload";
 import { useSipr } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 type Grp = { id: string; name: string; isOwner: boolean };
 
 /** Panneau « Partage avec un groupe » d'un classeur : chaque membre publie SES
- *  classeurs, les autres les voient en lecture seule. Le contenu est re-poussé
- *  automatiquement quand le classeur change. */
+ *  classeurs (photos comprises), les autres les voient en lecture seule. Le
+ *  contenu est re-poussé automatiquement quand le classeur change. */
 export function ClasseurGroupShare({ classeurId }: { classeurId: string }) {
   const classeur = useSipr((s) => s.classeurs.find((c) => c.id === classeurId));
   const visits = useSipr((s) => s.visits);
@@ -25,6 +28,7 @@ export function ClasseurGroupShare({ classeurId }: { classeurId: string }) {
 
   const [groups, setGroups] = useState<Grp[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
+  const [payload, setPayload] = useState<GroupClasseurPayload | null>(null);
   const pushedRef = useRef<string>("");
 
   useEffect(() => {
@@ -46,10 +50,31 @@ export function ClasseurGroupShare({ classeurId }: { classeurId: string }) {
 
   const shared = useMemo(() => new Set(classeur?.sharedGroupIds ?? []), [classeur?.sharedGroupIds]);
 
-  const payload = useMemo(
-    () => (classeur ? buildGroupClasseurPayload(classeur, visits, anomalies) : null),
-    [classeur, visits, anomalies],
-  );
+  // Reconstruit le contenu (avec ré-hydratation des photos) à chaque changement.
+  const buildKey = classeur
+    ? JSON.stringify({
+        n: classeur.name,
+        t: classeur.note ?? "",
+        v: classeur.visitIds,
+        a: classeur.anomalyIds,
+        vr: visits.map((x) => x.id),
+        ar: anomalies.map((x) => x.id),
+      })
+    : "";
+  useEffect(() => {
+    if (!classeur) {
+      setPayload(null);
+      return;
+    }
+    let alive = true;
+    void buildGroupClasseurPayload(classeur, visits, anomalies).then((p) => {
+      if (alive) setPayload(p);
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buildKey]);
 
   // Re-pousse le contenu vers les groupes déjà destinataires quand il change.
   useEffect(() => {
@@ -72,7 +97,7 @@ export function ClasseurGroupShare({ classeurId }: { classeurId: string }) {
         );
         pushedRef.current = key;
       } catch {
-        /* réseau : prochaine modif re-tentera */
+        /* réseau : la prochaine modif re-tentera */
       }
     }, 1500);
     return () => window.clearTimeout(t);
@@ -81,29 +106,32 @@ export function ClasseurGroupShare({ classeurId }: { classeurId: string }) {
   if (!classeur) return null;
 
   async function toggle(gid: string, on: boolean) {
-    if (!classeur || !payload) return;
+    if (!classeur) return;
     setBusy(gid);
     try {
       if (on) {
+        const p = payload ?? (await buildGroupClasseurPayload(classeur, visits, anomalies));
         const res = await apiShareClasseurToGroup({
           data: {
             workspaceId: gid,
             classeurId: classeur.id,
             name: classeur.name,
-            payload: payload as unknown as Record<string, unknown>,
+            payload: p as unknown as Record<string, unknown>,
           },
         });
         if (!res.ok) {
           toast.error(
             res.reason === "rate_limited"
               ? "Trop d'envois — réessayez dans un instant."
-              : "Partage impossible (droits du groupe ?).",
+              : res.reason === "too_large"
+                ? "Classeur trop lourd (trop de photos). Retirez des visites, ou partagez-les une à une."
+                : "Partage impossible (droits du groupe ?).",
           );
           return;
         }
         setClasseurGroups(classeur.id, [...shared, gid]);
         pushedRef.current = "";
-        toast.success("Classeur partagé avec le groupe.");
+        toast.success("Classeur partagé avec le groupe (photos comprises).");
       } else {
         const res = await apiUnshareClasseurFromGroup({
           data: { workspaceId: gid, classeurId: classeur.id },
@@ -141,8 +169,8 @@ export function ClasseurGroupShare({ classeurId }: { classeurId: string }) {
       ) : (
         <>
           <p className="text-sm text-muted">
-            Les membres du groupe voient ce classeur en lecture seule. Il se met à jour tout
-            seul quand vous le modifiez.
+            Les membres du groupe voient ce classeur en lecture seule, photos comprises. Il se
+            met à jour tout seul quand vous le modifiez.
           </p>
           <ul className="space-y-2">
             {groups.map((g) => {

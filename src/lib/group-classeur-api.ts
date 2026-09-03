@@ -12,7 +12,8 @@ import { vObject, vReqStr, vStr } from "./validate";
 import type { Sql } from "./db";
 import * as gdb from "./group-classeur-db";
 
-const MAX_PAYLOAD_BYTES = 6_000_000; // ~6 Mo de JSON (photos exclues côté client)
+const MAX_PAYLOAD_BYTES = 10_000_000; // ~10 Mo de JSON (photos comprises)
+const HARD_CEILING_BYTES = 13_000_000; // garde-fou anti-abus (au-delà = rejet dur)
 
 async function getSqlClient(): Promise<Sql> {
   const { getSql } = await import("@/lib/db");
@@ -33,7 +34,7 @@ export const apiShareClasseurToGroup = createServerFn({ method: "POST" })
       workspaceId: vReqStr(input.workspaceId, 64),
       classeurId: vReqStr(input.classeurId, 64),
       name: vStr(input.name, 200),
-      payload: vObject(input.payload, MAX_PAYLOAD_BYTES),
+      payload: vObject(input.payload, HARD_CEILING_BYTES),
     }),
   )
   .handler(async ({ data, context }) => {
@@ -46,6 +47,9 @@ export const apiShareClasseurToGroup = createServerFn({ method: "POST" })
     });
     if (!rl.ok) {
       return { ok: false as const, reason: "rate_limited" as const, retryAfter: rl.retryAfter };
+    }
+    if (JSON.stringify(data.payload).length > MAX_PAYLOAD_BYTES) {
+      return { ok: false as const, reason: "too_large" as const };
     }
     const name = await currentName(sql, context.userId);
     return gdb.shareClasseur(sql, {

@@ -340,6 +340,7 @@ export type DeletedIds = {
   fds: string[];
   rps: string[];
   paa: string[];
+  classeurs: string[];
 };
 
 export type WorkspaceCloudSnapshot = {

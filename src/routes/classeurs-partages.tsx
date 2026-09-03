@@ -4,7 +4,9 @@ import { FolderOpen, Layers } from "lucide-react";
 import { AuthPanel } from "@/components/auth-panel";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { Photo } from "@/components/photo";
 import { RiskBadge } from "@/components/risk-badge";
+import type { Anomaly } from "@/lib/types";
 import { authClient } from "@/lib/auth/client";
 import { apiListWorkspaces } from "@/lib/workspace-api";
 import { apiListGroupClasseurs, type SharedClasseurView } from "@/lib/group-classeur-api";
@@ -104,6 +106,23 @@ function SharedClasseursPage() {
   );
 }
 
+function ConstatRow({ a }: { a: Anomaly }) {
+  return (
+    <li className="flex items-start gap-2 rounded-lg bg-surface-2 px-2 py-1.5 text-sm">
+      {a.photo ? (
+        <Photo dataUrl={a.photo} className="size-12 shrink-0 rounded-md object-cover" />
+      ) : null}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate font-medium">{a.title}</span>
+        {a.description ? (
+          <span className="line-clamp-2 text-xs text-muted">{a.description}</span>
+        ) : null}
+      </span>
+      {a.kinney?.level ? <RiskBadge level={a.kinney.level} /> : null}
+    </li>
+  );
+}
+
 function SharedClasseurCard({ row }: { row: SharedClasseurView }) {
   const [open, setOpen] = useState(false);
   let parsed: unknown = null;
@@ -143,32 +162,30 @@ function SharedClasseurCard({ row }: { row: SharedClasseurView }) {
             const constats = payload.anomalies.filter((a) => a.visitId === v.id);
             return (
               <div key={v.id} className="space-y-1">
-                <p className="text-sm font-medium">{visitLabel(v)}</p>
-                <p className="text-xs text-subtle">
-                  {v.site || "Adresse non précisée"} · {formatShortDate(v.date)}
-                </p>
+                <div className="flex items-center gap-2">
+                  {v.coverPhoto ? (
+                    <Photo
+                      dataUrl={v.coverPhoto}
+                      className="size-10 shrink-0 rounded-lg object-cover"
+                    />
+                  ) : null}
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{visitLabel(v)}</p>
+                    <p className="truncate text-xs text-subtle">
+                      {v.site || "Adresse non précisée"} · {formatShortDate(v.date)}
+                    </p>
+                  </div>
+                </div>
                 {constats.length > 0 ? (
                   <ul className="mt-1 space-y-1">
                     {constats.map((a) => (
-                      <li
-                        key={a.id}
-                        className="flex items-start justify-between gap-2 rounded-lg bg-surface-2 px-2 py-1.5 text-sm"
-                      >
-                        <span className="min-w-0">
-                          <span className="block truncate font-medium">{a.title}</span>
-                          {a.description ? (
-                            <span className="block truncate text-xs text-muted">{a.description}</span>
-                          ) : null}
-                        </span>
-                        {a.kinney?.level ? <RiskBadge level={a.kinney.level} /> : null}
-                      </li>
+                      <ConstatRow key={a.id} a={a} />
                     ))}
                   </ul>
                 ) : null}
               </div>
             );
           })}
-          {/* Constats hors visite du classeur */}
           {(() => {
             const loose = payload.anomalies.filter(
               (a) => !payload.visits.some((v) => v.id === a.visitId),
@@ -179,18 +196,7 @@ function SharedClasseurCard({ row }: { row: SharedClasseurView }) {
                 <p className="text-sm font-medium">Constats isolés</p>
                 <ul className="space-y-1">
                   {loose.map((a) => (
-                    <li
-                      key={a.id}
-                      className="flex items-start justify-between gap-2 rounded-lg bg-surface-2 px-2 py-1.5 text-sm"
-                    >
-                      <span className="min-w-0">
-                        <span className="block truncate font-medium">{a.title}</span>
-                        {a.description ? (
-                          <span className="block truncate text-xs text-muted">{a.description}</span>
-                        ) : null}
-                      </span>
-                      {a.kinney?.level ? <RiskBadge level={a.kinney.level} /> : null}
-                    </li>
+                    <ConstatRow key={a.id} a={a} />
                   ))}
                 </ul>
               </div>

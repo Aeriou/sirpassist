@@ -128,7 +128,7 @@ export function applyUserSnapshot(
   const anomalies = mergeById(state.anomalies, snap.anomalies ?? [], deleted.anomalies);
   const fds = mergeById(state.fds, snap.fds ?? [], deleted.fds);
   const rps = mergeById(state.rps, snap.rps ?? [], deleted.rps);
-  const classeurs = mergeById(state.classeurs, snap.classeurs ?? []);
+  const classeurs = mergeById(state.classeurs, snap.classeurs ?? [], deleted.classeurs);
   const workspaces = mergeById(state.workspaces, snap.workspaces ?? []);
   const tickets = mergeById(state.tickets, snap.tickets ?? []);
 

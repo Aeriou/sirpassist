@@ -1049,7 +1049,13 @@ export const useSipr = create<State>()(
           ),
         }),
       removeClasseur: (id) =>
-        set({ classeurs: get().classeurs.filter((c) => c.id !== id) }),
+        set({
+          classeurs: get().classeurs.filter((c) => c.id !== id),
+          deleted: {
+            ...get().deleted,
+            classeurs: rememberIds(get().deleted.classeurs, [id]),
+          },
+        }),
       setClasseurItem: (id, kind, itemId, on) =>
         set({
           classeurs: get().classeurs.map((c) => {
