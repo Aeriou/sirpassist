@@ -108,6 +108,14 @@ export async function stripeCustomerIdOf(sql: Sql, userId: string): Promise<stri
   return id && id.startsWith("cus_") ? id : null;
 }
 
+export async function stripeSubscriptionIdOf(sql: Sql, userId: string): Promise<string | null> {
+  const rows = await sql<{ stripe_subscription_id: string | null }>`
+    select stripe_subscription_id from sipr_billing where user_id = ${userId} limit 1
+  `;
+  const id = rows[0]?.stripe_subscription_id ?? null;
+  return id && id.startsWith("sub_") ? id : null;
+}
+
 /** Retrouve l'utilisateur par son id client Stripe (webhook). */
 export async function userIdByStripeCustomer(
   sql: Sql,

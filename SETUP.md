@@ -51,8 +51,9 @@ variable d'env.
    `npm run build` (impératif, sinon `db:migrate` ne tourne pas). Renseigner les
    variables ci-dessus. **Deploy**.
 4. **Stripe** (si paiement) — dashboard → webhook vers
-   `https://<domaine>/api/stripe/webhook`, événements `checkout.session.completed`
-   + `customer.subscription.updated|deleted` → `STRIPE_WEBHOOK_SECRET`.
+   `https://<domaine>/api/stripe/webhook`, événements `checkout.session.completed`,
+   `customer.subscription.updated`, `customer.subscription.deleted`, `charge.refunded`
+   → `STRIPE_WEBHOOK_SECRET`.
 
 ---
 

@@ -53,7 +53,7 @@ Décisions initiales (toutes appliquées) :
 
 ### Phase 5 — Entitlement Pro serveur + webhook Stripe ✅
 - [x] Colonne `plan` (table `sipr_billing`), écrite serveur uniquement.
-- [x] `/api/stripe/webhook` : signature vérifiée, gère `checkout.session.completed` + `customer.subscription.updated|deleted`.
+- [x] `/api/stripe/webhook` : signature vérifiée, gère `checkout.session.completed`, `customer.subscription.updated|deleted`, `charge.refunded` (remboursement → accès coupé immédiatement + abonnement annulé).
 - [x] `planView` lit le forfait depuis le serveur ; `activatePlan`/`activatePro` retirés du chemin d'écriture client.
 - [x] Allowlist propriétaire serveur ; `admin-account.ts` supprimé.
 - [x] Durcissement complémentaire : `startCheckout` / `confirmCheckout` / `startBillingPortal` sous `authMiddleware`, IDOR corrigé (customerId depuis la base, pas le client).
