@@ -78,7 +78,22 @@ const upd = await gdb.shareClasseur(sql, {
   workspaceId: WS, userId: MEMBER, userName: "Mireille", classeurId: "c1", name: "Classeur 1 (maj)",
   payload: { v: 1, visits: [{ id: "v1" }, { id: "v2" }], anomalies: [] },
 });
-check("re-publication même classeur -> upsert", upd.ok === true);
+check("re-publication même classeur (même auteur) -> upsert", upd.ok === true);
+
+// L'id "c1" est visible de tout membre actif (retourné par listGroupClasseurs) :
+// un AUTRE membre actif ne doit PAS pouvoir l'écraser en le réutilisant.
+const hijack = await gdb.shareClasseur(sql, {
+  workspaceId: WS, userId: OWNER, userName: "Olivier", classeurId: "c1", name: "Défiguré",
+  payload: { v: 1, visits: [], anomalies: [] },
+});
+check("un autre membre actif ne peut PAS écraser le classeur 'c1' de Mireille -> forbidden", hijack.ok === false && hijack.reason === "forbidden");
+const afterHijackAttempt = await gdb.listGroupClasseurs(sql, WS, OWNER);
+check(
+  "le classeur 'c1' n'a pas été défiguré (nom et auteur intacts)",
+  afterHijackAttempt.ok === true && afterHijackAttempt.ok &&
+    afterHijackAttempt.classeurs[0]!.name === "Classeur 1 (maj)" &&
+    afterHijackAttempt.classeurs[0]!.shared_by === MEMBER,
+);
 
 // --- lecture ---
 const listMember = await gdb.listGroupClasseurs(sql, WS, MEMBER);

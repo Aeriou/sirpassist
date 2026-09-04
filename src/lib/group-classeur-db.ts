@@ -55,6 +55,17 @@ export async function shareClasseur(
   if (!(await activeMember(sql, input.workspaceId, input.userId))) {
     return { ok: false, reason: "forbidden" };
   }
+  // L'id de classeur est visible de tout membre actif (retourné par
+  // listGroupClasseurs) : sans ce contrôle, n'importe quel membre pourrait
+  // écraser (défigurer) le classeur publié par un autre en réutilisant son id.
+  const existing = await sql<{ shared_by: string }>`
+    select shared_by from group_classeur
+    where workspace_id = ${input.workspaceId} and classeur_id = ${input.classeurId}
+    limit 1
+  `;
+  if (existing[0] && existing[0].shared_by !== input.userId) {
+    return { ok: false, reason: "forbidden" };
+  }
   const payloadText = JSON.stringify(input.payload ?? {});
   await sql`
     insert into group_classeur
